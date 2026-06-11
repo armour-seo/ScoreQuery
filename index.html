@@ -975,7 +975,7 @@
 
     <script>
         // Default Excel File Name / URL inside the repo
-        const DEFAULT_EXCEL_FILENAME = "2026-1_MIS_성적_출석,중간,퀴즈 반영_V21_20260611.xlsx";
+        const DEFAULT_EXCEL_FILENAME = "2026-1_MISscore.xlsx";
         
         // DOM Elements
         const settingsToggleBtn = document.getElementById('settings-toggle-btn');
@@ -1092,7 +1092,12 @@
             btnSearch.addEventListener('click', performSearch);
             
             // Load Remote URL from storage, or use default relative URL
-            const savedUrl = localStorage.getItem('score_query_excel_url');
+            let savedUrl = localStorage.getItem('score_query_excel_url');
+            // Check if savedUrl contains old filename components and clear it if so
+            if (savedUrl && (savedUrl.includes('2026-1_MIS_') || savedUrl.includes('%EC%84%B1%EC%A0%81') || savedUrl.includes('%E1%85%AE%E1%86%A8'))) {
+                localStorage.removeItem('score_query_excel_url');
+                savedUrl = null;
+            }
             const initialUrl = savedUrl || getAbsoluteDefaultUrl();
             remoteUrlInput.value = initialUrl;
             
