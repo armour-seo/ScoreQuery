@@ -14,6 +14,12 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- SheetJS (Excel Parser) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        if (typeof XLSX === 'undefined') {
+            console.warn("JSDelivr XLSX CDN failed. Loading fallback from cdnjs...");
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
+        }
+    </script>
     
     <style>
         :root {
@@ -787,9 +793,12 @@
         </div>
 
         <!-- Error Container -->
-        <div id="error-container" class="error-banner hidden">
-            <i data-lucide="alert-circle" style="flex-shrink: 0;"></i>
-            <span id="error-text">오류가 발생했습니다.</span>
+        <div id="error-container" class="error-banner hidden" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; width: 100%;">
+                <i data-lucide="alert-circle" style="flex-shrink: 0;"></i>
+                <span id="error-text">오류가 발생했습니다.</span>
+            </div>
+            <pre id="error-debug" style="font-family: monospace; font-size: 0.75rem; background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 8px; width: 100%; overflow-x: auto; margin-top: 0.25rem; white-space: pre-wrap; word-break: break-all; border: 1px solid rgba(248, 113, 113, 0.2); color: #fca5a5;" class="hidden"></pre>
         </div>
 
         <!-- Initial/Empty State -->
@@ -1033,9 +1042,40 @@
         let CURRENT_DATA = null;
         let radarChart = null;
 
+        // Helper to safely URL encode Korean/spaces in URL
+        function safeEncodeUrl(url) {
+            try {
+                if (/%[0-9a-fA-F]{2}/.test(url)) {
+                    return url; // Already encoded
+                }
+                return url.split('/').map(seg => {
+                    if (/[^\x00-\x7F]/.test(seg)) {
+                        return encodeURIComponent(seg);
+                    }
+                    return seg;
+                }).join('/');
+            } catch (e) {
+                return url;
+            }
+        }
+
+        // Helper to resolve absolute URL even without trailing slash
+        function getAbsoluteDefaultUrl() {
+            const loc = window.location;
+            let path = loc.pathname;
+            const lastSegment = path.substring(path.lastIndexOf('/') + 1);
+            if (lastSegment.includes('.')) {
+                path = path.substring(0, path.lastIndexOf('/') + 1);
+            }
+            if (!path.endsWith('/')) {
+                path += '/';
+            }
+            return `${loc.origin}${path}${DEFAULT_EXCEL_FILENAME}`;
+        }
+
         // Startup Configuration
         window.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
+            try { lucide.createIcons(); } catch (e) { console.error(e); }
             
             // Toggle Settings Accordion
             settingsToggleBtn.addEventListener('click', () => {
@@ -1053,7 +1093,7 @@
             
             // Load Remote URL from storage, or use default relative URL
             const savedUrl = localStorage.getItem('score_query_excel_url');
-            const initialUrl = savedUrl || `./${DEFAULT_EXCEL_FILENAME}`;
+            const initialUrl = savedUrl || getAbsoluteDefaultUrl();
             remoteUrlInput.value = initialUrl;
             
             // Fetch remote URL on load
@@ -1085,12 +1125,15 @@
             updateFileStatus("loading", "엑셀 파일을 다운로드하는 중...");
             
             // Update empty state
-            emptyIcon.setAttribute('data-lucide', 'download-cloud');
-            emptyTitle.textContent = "원격 파일 다운로드 중";
-            emptyDesc.textContent = `${url} 주소에서 엑셀 파일을 가져오고 있습니다.`;
-            lucide.createIcons();
+            try {
+                emptyIcon.setAttribute('data-lucide', 'download-cloud');
+                emptyTitle.textContent = "원격 파일 다운로드 중";
+                emptyDesc.textContent = `${url} 주소에서 엑셀 파일을 가져오고 있습니다.`;
+                lucide.createIcons();
+            } catch (e) { console.error(e); }
             
-            fetch(url)
+            const encodedUrl = safeEncodeUrl(url);
+            fetch(encodedUrl)
                 .then(res => {
                     if (!res.ok) throw new Error(`HTTP 에러! 상태코드: ${res.status}`);
                     return res.arrayBuffer();
@@ -1100,14 +1143,16 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    showError(`원격 파일을 불러오지 못했습니다. 설정(우측 상단)에서 파일 URL을 확인하시거나 로컬 컴퓨터의 파일을 직접 올려주세요. (에러: ${err.message})`);
+                    showError(`원격 파일을 불러오지 못했습니다. 설정(우측 상단)에서 파일 URL을 확인하시거나 로컬 컴퓨터의 파일을 직접 올려주세요.`, err);
                     updateFileStatus("error", "다운로드 실패");
                     
                     // Update empty state for error
-                    emptyIcon.setAttribute('data-lucide', 'database-backup');
-                    emptyTitle.textContent = "데이터 로드 실패";
-                    emptyDesc.textContent = "원격 엑셀 파일이 준비되지 않았습니다. 우측 상단의 '설정'을 클릭해 파일을 등록하세요.";
-                    lucide.createIcons();
+                    try {
+                        emptyIcon.setAttribute('data-lucide', 'database-backup');
+                        emptyTitle.textContent = "데이터 로드 실패";
+                        emptyDesc.textContent = "원격 엑셀 파일이 준비되지 않았습니다. 우측 상단의 '설정'을 클릭해 파일을 등록하세요.";
+                        lucide.createIcons();
+                    } catch (e) { console.error(e); }
                     
                     // Enable inputs just in case they want to upload
                     inputStudentId.disabled = true;
@@ -1126,8 +1171,8 @@
                 const buffer = e.target.result;
                 processExcelBuffer(buffer, file.name);
             };
-            reader.onerror = function() {
-                showError("로컬 파일을 읽는 도중 오류가 발생했습니다.");
+            reader.onerror = function(err) {
+                showError("로컬 파일을 읽는 도중 오류가 발생했습니다.", err);
                 updateFileStatus("error", "로컬 로드 실패");
             };
             reader.readAsArrayBuffer(file);
@@ -1136,6 +1181,9 @@
         // 3. Common Processing Logic
         function processExcelBuffer(buffer, name) {
             try {
+                if (typeof XLSX === 'undefined') {
+                    throw new Error("SheetJS 라이브러리(XLSX)가 로드되지 않았습니다. 인터넷 연결이나 CDN을 확인해 주세요.");
+                }
                 const data = new Uint8Array(buffer);
                 const workbook = XLSX.read(data, {type: 'array'});
                 
@@ -1149,7 +1197,7 @@
                 // Process and map columns
                 const parsed = parseExcelRows(rows);
                 if (!parsed) {
-                    throw new Error("엑셀 파일을 파싱하는 도중 오류가 발생했습니다.");
+                    throw new Error("엑셀 데이터를 파싱하여 유효한 구조로 분류하지 못했습니다.");
                 }
                 
                 // Cache data globally
@@ -1169,17 +1217,19 @@
                 inputStudentId.focus();
                 
                 // Reset Empty state to waiting search
-                emptyIcon.setAttribute('data-lucide', 'search');
-                emptyTitle.textContent = "성적 조회 대기 중";
-                emptyDesc.textContent = `엑셀 파일(${name})이 성공적으로 로드되었습니다. 학번을 입력해 성적을 조회하세요.`;
-                lucide.createIcons();
+                try {
+                    emptyIcon.setAttribute('data-lucide', 'search');
+                    emptyTitle.textContent = "성적 조회 대기 중";
+                    emptyDesc.textContent = `엑셀 파일(${name})이 성공적으로 로드되었습니다. 학번을 입력해 성적을 조회하세요.`;
+                    lucide.createIcons();
+                } catch (e) { console.error(e); }
                 
                 // Hide settings panel if it was open
                 settingsPanel.classList.add('hidden');
                 
             } catch (err) {
                 console.error(err);
-                showError(`엑셀 파일 파싱 오류: ${err.message}`);
+                showError(`엑셀 파일 파싱 오류가 발생했습니다.`, err);
                 updateFileStatus("error", "파싱 실패");
             }
         }
@@ -1198,7 +1248,7 @@
                 throw new Error("올바른 데이터 헤더(열 명칭)를 찾을 수 없습니다.");
             }
             
-            const headers = jsonData[headerRowIndex].map(h => h !== null ? String(h).trim() : "");
+            const headers = jsonData[headerRowIndex].map(h => (h !== null && h !== undefined) ? String(h).trim() : "");
             
             // Fuzzy mapping helper
             function findColIndex(possibleNames) {
@@ -1232,6 +1282,13 @@
                 throw new Error("엑셀 시트에서 '학번' 열을 추적할 수 없습니다. 컬럼 제목을 확인해 주세요.");
             }
             
+            // Safe string cleaner to avoid 'undefined'
+            function cleanStr(val, defaultVal = "") {
+                if (val === undefined || val === null) return defaultVal;
+                const str = String(val).trim();
+                return str === "" ? defaultVal : str;
+            }
+            
             const students = [];
             const summaryKeywords = ['평균', '합계', '최대', '최소', '계', 'mean', 'average', 'sum', 'total', 'max', 'min'];
             
@@ -1253,13 +1310,13 @@
                 
                 const student = {
                     id: idStr,
-                    name: mapping.name !== -1 && row[mapping.name] !== null ? String(row[mapping.name]).trim() : "이름 없음",
-                    dept: mapping.dept !== -1 && row[mapping.dept] !== null ? String(row[mapping.dept]).trim() : "-",
-                    class: mapping.class !== -1 && row[mapping.class] !== null ? String(row[mapping.class]).trim() : "-",
-                    grade: mapping.grade !== -1 && row[mapping.grade] !== null ? String(row[mapping.grade]).trim() : "-",
-                    rank: mapping.rank !== -1 && row[mapping.rank] !== null ? String(row[mapping.rank]).trim() : "-",
-                    absences: mapping.absences !== -1 && row[mapping.absences] !== null ? parseInt(row[mapping.absences]) || 0 : 0,
-                    notes: mapping.notes !== -1 && row[mapping.notes] !== null ? String(row[mapping.notes]).trim() : "",
+                    name: mapping.name !== -1 ? cleanStr(row[mapping.name], "이름 없음") : "이름 없음",
+                    dept: mapping.dept !== -1 ? cleanStr(row[mapping.dept], "-") : "-",
+                    class: mapping.class !== -1 ? cleanStr(row[mapping.class], "-") : "-",
+                    grade: mapping.grade !== -1 ? cleanStr(row[mapping.grade], "-") : "-",
+                    rank: mapping.rank !== -1 ? cleanStr(row[mapping.rank], "-") : "-",
+                    absences: mapping.absences !== -1 && row[mapping.absences] !== undefined && row[mapping.absences] !== null ? parseInt(row[mapping.absences]) || 0 : 0,
+                    notes: mapping.notes !== -1 ? cleanStr(row[mapping.notes], "") : "",
                     scores: {
                         quiz: mapping.quiz !== -1 ? parseNumeric(row[mapping.quiz]) : 0,
                         attendance: mapping.attendance !== -1 ? parseNumeric(row[mapping.attendance]) : 0,
@@ -1325,16 +1382,24 @@
             } else {
                 fileStatusBadge.querySelector('i').setAttribute('data-lucide', 'info');
             }
-            lucide.createIcons();
+            try { lucide.createIcons(); } catch (e) { console.error(e); }
         }
 
-        // Show/Hide Error banner
-        function showError(msg) {
+        // Show/Hide Error banner with debug stack traces
+        function showError(msg, err = null) {
+            const debugElem = document.getElementById('error-debug');
             if (msg) {
                 errorText.textContent = msg;
                 errorContainer.classList.remove('hidden');
+                if (err) {
+                    debugElem.textContent = `${err.name}: ${err.message}\n${err.stack || ''}`;
+                    debugElem.classList.remove('hidden');
+                } else {
+                    debugElem.classList.add('hidden');
+                }
             } else {
                 errorContainer.classList.add('hidden');
+                debugElem.classList.add('hidden');
             }
         }
 
