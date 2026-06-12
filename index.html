@@ -1491,8 +1491,18 @@
             studentIdDisplay.textContent = `학번: ${student.id}`;
             studentDept.textContent = student.dept;
             studentClass.textContent = student.class.includes("분반") ? student.class : `${student.class}분반`;
-            studentGrade.textContent = student.grade;
-            studentRank.textContent = student.rank;
+            // studentGrade.textContent = student.grade; // 평점은 아직 최종 결과가 아니므로 비워둠
+            studentGrade.textContent = "-";
+            
+            // Calculate total students in the same division (class)
+            const classVal = student.class;
+            const totalInClass = CURRENT_DATA.students.filter(s => s.class === classVal).length;
+            
+            if (student.rank && student.rank !== "-") {
+                studentRank.textContent = `${student.rank}/${totalInClass}`;
+            } else {
+                studentRank.textContent = "-";
+            }
             studentNotes.textContent = student.notes || "특이사항 없음";
             
             // Avatar letter
