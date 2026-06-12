@@ -1289,7 +1289,7 @@
                 grade: findColIndex(['평점', '학점', 'grade']),
                 rank: findColIndex(['석차', 'rank']),
                 absences: findColIndex(['결석수', 'absences']),
-                notes: findColIndex(['비고', 'notes', 'remark'])
+                notes: findColIndex(['비고', 'notes', 'remark', '특이사항', 'memo', '메모'])
             };
             
             if (mapping.id === -1) {
@@ -1491,8 +1491,7 @@
             studentIdDisplay.textContent = `학번: ${student.id}`;
             studentDept.textContent = student.dept;
             studentClass.textContent = student.class.includes("분반") ? student.class : `${student.class}분반`;
-            // studentGrade.textContent = student.grade; // 평점은 아직 최종 결과가 아니므로 비워둠
-            studentGrade.textContent = "-";
+            studentGrade.textContent = student.grade;
             
             // Calculate total students in the same division (class)
             const classVal = student.class;
@@ -1503,7 +1502,7 @@
             } else {
                 studentRank.innerHTML = "-";
             }
-            studentNotes.textContent = student.notes || "특이사항 없음";
+            studentNotes.textContent = (student.notes && student.notes !== "0") ? student.notes : "특이사항 없음";
             
             // Avatar letter
             studentAvatar.textContent = student.name ? student.name.charAt(0) : "학";
