@@ -737,7 +737,7 @@
                     <i data-lucide="info" style="width: 14px; height: 14px;"></i>
                     <span id="file-status-text">엑셀 파일 로드 대기 중</span>
                 </div>
-                <button id="settings-toggle-btn" class="settings-toggle-btn">
+                <button id="settings-toggle-btn" class="settings-toggle-btn hidden">
                     <i data-lucide="settings"></i>
                     <span>설정</span>
                 </button>
@@ -1077,6 +1077,12 @@
         // Startup Configuration
         window.addEventListener('DOMContentLoaded', () => {
             try { lucide.createIcons(); } catch (e) { console.error(e); }
+            
+            // Admin Mode: Show settings button only if ?admin=true is in the URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('admin') === 'true') {
+                settingsToggleBtn.classList.remove('hidden');
+            }
             
             // Toggle Settings Accordion
             settingsToggleBtn.addEventListener('click', () => {
