@@ -1234,6 +1234,17 @@
                 console.error(err);
                 showError(`엑셀 파일 파싱 오류가 발생했습니다.`, err);
                 updateFileStatus("error", "파싱 실패");
+                
+                // Update empty state for parsing error
+                try {
+                    updateEmptyIcon('database-backup');
+                    emptyTitle.textContent = "데이터 파싱 실패";
+                    emptyDesc.textContent = `엑셀 파일을 가져왔으나 데이터를 분석하지 못했습니다: ${err.message}`;
+                } catch (e) { console.error(e); }
+                
+                // Ensure inputs are disabled
+                inputStudentId.disabled = true;
+                btnSearch.disabled = true;
             }
         }
 
