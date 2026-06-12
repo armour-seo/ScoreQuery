@@ -846,7 +846,7 @@
                         </div>
                         <div class="info-item">
                             <span class="info-label">석차 (분반)</span>
-                            <span class="info-value" id="student-rank">-</span>
+                            <span class="info-value" id="student-rank" style="display: inline-flex; align-items: baseline; margin-top: 0.15rem;">-</span>
                         </div>
                         <div class="info-item" style="grid-column: span 2;">
                             <span class="info-label">출결 감점 (결석 수)</span>
@@ -1499,9 +1499,9 @@
             const totalInClass = CURRENT_DATA.students.filter(s => s.class === classVal).length;
             
             if (student.rank && student.rank !== "-") {
-                studentRank.textContent = `${student.rank}/${totalInClass}`;
+                studentRank.innerHTML = `<span style="font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 800; color: var(--accent-purple);">${student.rank}</span><span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500; margin-left: 0.15rem;">/ ${totalInClass}</span>`;
             } else {
-                studentRank.textContent = "-";
+                studentRank.innerHTML = "-";
             }
             studentNotes.textContent = student.notes || "특이사항 없음";
             
@@ -1511,7 +1511,7 @@
             // Absences pill styling
             const abs = parseInt(student.absences) || 0;
             if (abs >= 4) {
-                studentAbsences.innerHTML = `<span class="pill pill-danger">${abs}회 결석 (F 대상 가능성 있음)</span>`;
+                studentAbsences.innerHTML = `<span class="pill pill-danger">${abs}회 결석</span>`;
             } else if (abs > 0) {
                 studentAbsences.innerHTML = `<span class="pill pill-warning">${abs}회 결석</span>`;
             } else {
