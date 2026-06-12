@@ -803,7 +803,9 @@
 
         <!-- Initial/Empty State -->
         <div id="empty-state" class="glass-panel empty-state">
-            <i data-lucide="database" class="empty-icon" id="empty-icon"></i>
+            <div id="empty-icon-container">
+                <i data-lucide="database" class="empty-icon"></i>
+            </div>
             <h3 id="empty-title">데이터를 불러오는 중...</h3>
             <p id="empty-desc">엑셀 성적 데이터를 초기 탐색하고 있습니다. 잠시만 기다려 주세요.</p>
         </div>
@@ -993,7 +995,6 @@
         const errorText = document.getElementById('error-text');
         
         const emptyState = document.getElementById('empty-state');
-        const emptyIcon = document.getElementById('empty-icon');
         const emptyTitle = document.getElementById('empty-title');
         const emptyDesc = document.getElementById('empty-desc');
         const loadingState = document.getElementById('loading-state');
@@ -1131,10 +1132,9 @@
             
             // Update empty state
             try {
-                emptyIcon.setAttribute('data-lucide', 'download-cloud');
+                updateEmptyIcon('download-cloud');
                 emptyTitle.textContent = "원격 파일 다운로드 중";
                 emptyDesc.textContent = `${url} 주소에서 엑셀 파일을 가져오고 있습니다.`;
-                lucide.createIcons();
             } catch (e) { console.error(e); }
             
             const encodedUrl = safeEncodeUrl(url);
@@ -1153,10 +1153,9 @@
                     
                     // Update empty state for error
                     try {
-                        emptyIcon.setAttribute('data-lucide', 'database-backup');
+                        updateEmptyIcon('database-backup');
                         emptyTitle.textContent = "데이터 로드 실패";
                         emptyDesc.textContent = "원격 엑셀 파일이 준비되지 않았습니다. 우측 상단의 '설정'을 클릭해 파일을 등록하세요.";
-                        lucide.createIcons();
                     } catch (e) { console.error(e); }
                     
                     // Enable inputs just in case they want to upload
@@ -1223,10 +1222,9 @@
                 
                 // Reset Empty state to waiting search
                 try {
-                    emptyIcon.setAttribute('data-lucide', 'search');
+                    updateEmptyIcon('search');
                     emptyTitle.textContent = "성적 조회 대기 중";
                     emptyDesc.textContent = `엑셀 파일(${name})이 성공적으로 로드되었습니다. 학번을 입력해 성적을 조회하세요.`;
-                    lucide.createIcons();
                 } catch (e) { console.error(e); }
                 
                 // Hide settings panel if it was open
@@ -1376,18 +1374,42 @@
             fileStatusText.textContent = text;
             fileStatusBadge.className = "status-badge";
             
+            // Remove existing icon element (can be <i> or <svg> after Lucide replaces it)
+            const oldIcon = fileStatusBadge.querySelector('i, svg');
+            if (oldIcon) {
+                oldIcon.remove();
+            }
+            
+            // Re-create a fresh <i> tag for Lucide to process
+            const newIcon = document.createElement('i');
+            newIcon.style.width = "14px";
+            newIcon.style.height = "14px";
+            
             if (status === "success") {
                 fileStatusBadge.classList.add('loaded');
-                fileStatusBadge.querySelector('i').setAttribute('data-lucide', 'check-circle');
+                newIcon.setAttribute('data-lucide', 'check-circle');
             } else if (status === "error") {
                 fileStatusBadge.classList.add('error');
-                fileStatusBadge.querySelector('i').setAttribute('data-lucide', 'alert-circle');
+                newIcon.setAttribute('data-lucide', 'alert-circle');
             } else if (status === "loading") {
-                fileStatusBadge.querySelector('i').setAttribute('data-lucide', 'loader');
+                newIcon.setAttribute('data-lucide', 'loader');
             } else {
-                fileStatusBadge.querySelector('i').setAttribute('data-lucide', 'info');
+                newIcon.setAttribute('data-lucide', 'info');
             }
+            
+            // Insert the new icon before the status text
+            fileStatusBadge.insertBefore(newIcon, fileStatusText);
+            
             try { lucide.createIcons(); } catch (e) { console.error(e); }
+        }
+
+        // Empty Icon UI helper
+        function updateEmptyIcon(iconName) {
+            const container = document.getElementById('empty-icon-container');
+            if (container) {
+                container.innerHTML = `<i data-lucide="${iconName}" class="empty-icon"></i>`;
+                try { lucide.createIcons(); } catch (e) { console.error(e); }
+            }
         }
 
         // Show/Hide Error banner with debug stack traces
