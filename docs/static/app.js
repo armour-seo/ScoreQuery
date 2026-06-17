@@ -47,6 +47,7 @@
     let radarChart = null;
     let gradeData = null;
     let selectedCourse = null; // { year, semester, name }
+    let cachedAvailableCourses = [];
 
     // ── Event Listeners ──
     loginForm.addEventListener('submit', handleLogin);
@@ -72,9 +73,11 @@
     // 즉시 및 로드 시 체크
     checkStudentLock();
     checkScheduleAndControl();
+    loadAvailableCoursesAsync();
     document.addEventListener('DOMContentLoaded', () => {
         checkStudentLock();
         checkScheduleAndControl();
+        loadAvailableCoursesAsync();
     });
 
     // 과목 선택 시 공시 상태 확인 후 인증 필드 표시
@@ -91,6 +94,26 @@
             // 과목명 표시
             document.getElementById('login-course-info').textContent =
                 `${selectedCourse.year} ${selectedCourse.semester} — ${selectedCourse.name}`;
+
+            // 담당교수 탑바 정보 동적 갱신
+            const topBarProf = document.getElementById('top-bar-prof');
+            if (topBarProf) {
+                if (selectedCourse.professor && selectedCourse.professor.name) {
+                    topBarProf.innerHTML = `담당교수: ${selectedCourse.professor.name} ` +
+                        (selectedCourse.professor.email ? `(<a href="mailto:${selectedCourse.professor.email}">${selectedCourse.professor.email}</a>)` : '');
+                } else {
+                    // 폴백: 기존 로컬스토리지 설정
+                    try {
+                        const cfgRaw = localStorage.getItem('scorequery_config');
+                        if (cfgRaw) {
+                            const cfg = JSON.parse(cfgRaw);
+                            if (cfg.professor) {
+                                topBarProf.innerHTML = `담당교수: ${cfg.professor.name} (<a href="mailto:${cfg.professor.email}">${cfg.professor.email}</a>)`;
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
+            }
 
             // 공시 상태 확인
             const publishStatus = checkPublishStatus(selectedCourse);
@@ -110,10 +133,15 @@
 
     // ── 공시 상태 확인 ──
     function checkPublishStatus(course) {
+        // 만약 data.json 등에서 직접 가져온 파일 소스이거나 이미 published가 강제 지정되어 있다면 즉시 허용
+        if (course && (course._source === 'data.json' || course.published === true)) {
+            return { available: true };
+        }
         const key = `scorequery_publish_${course.year}_${course.semester}_${course.name}`;
         try {
             const raw = localStorage.getItem(key);
             if (!raw) {
+                if (course.published) return { available: true };
                 return { available: false, message: '📢 아직 성적이 공시되지 않았습니다.\n교수님께서 공시한 후 조회할 수 있습니다.' };
             }
             const info = JSON.parse(raw);
@@ -131,41 +159,104 @@
             }
             return { available: true };
         } catch {
+            if (course && course.published) return { available: true };
             return { available: false, message: '📢 아직 성적이 공시되지 않았습니다.' };
         }
     }
 
-    // ── 과목 목록 가져오기 ──
-    function getAvailableCourses() {
-        // 1) 전용 과목 목록 키
+    // ── 과목 목록 비동기 사전 로딩 ──
+    async function loadAvailableCoursesAsync() {
+        const coursesMap = new Map();
+        const addCourse = (c) => {
+            if (!c || !c.name) return;
+            const key = `${c.year || ''}_${c.semester || ''}_${c.name}`;
+            if (!coursesMap.has(key)) {
+                coursesMap.set(key, {
+                    year: c.year || '',
+                    semester: c.semester || '',
+                    name: c.name,
+                    professor: c.professor || null,
+                    publishDate: c.publishDate || null,
+                    published: c.published || false,
+                    _source: c._source || 'local'
+                });
+            }
+        };
+
+        // 1) localStorage - scorequery_courses
         try {
             const raw = localStorage.getItem('scorequery_courses');
             if (raw) {
                 const list = JSON.parse(raw);
-                if (list.length > 0) return list;
+                list.forEach(c => addCourse(c));
             }
         } catch { /* ignore */ }
 
-        // 2) 교수 설정에서 courses 배열 가져오기 (폴백)
+        // 2) localStorage - scorequery_config
         try {
             const cfgRaw = localStorage.getItem('scorequery_config');
             if (cfgRaw) {
                 const cfg = JSON.parse(cfgRaw);
-                if (cfg.courses && cfg.courses.length > 0) {
-                    return cfg.courses.map(c => ({ year: c.year, semester: c.semester, name: c.name }));
+                if (cfg.courses) {
+                    cfg.courses.forEach(c => addCourse(c));
                 }
-                // 이전 형식: 단일 course
-                if (cfg.course && cfg.course.name) {
-                    return [{ year: cfg.course.year, semester: cfg.course.semester, name: cfg.course.name }];
+                if (cfg.course) {
+                    addCourse(cfg.course);
                 }
             }
         } catch { /* ignore */ }
 
-        return [];
+        // 3) data.json 파일에서 비동기 조회 및 폴백
+        try {
+            const res = await fetch('data.json');
+            if (res.ok) {
+                const parsed = await res.json();
+                if (parsed.course && parsed.course.name) {
+                    const c = parsed.course;
+                    addCourse({
+                        year: c.year,
+                        semester: c.semester,
+                        name: c.name,
+                        professor: parsed.professor,
+                        published: true,
+                        _source: 'data.json'
+                    });
+                } else {
+                    // 레거시 data.json 폴백 (2026년 1학기 경영정보시스템)
+                    addCourse({
+                        year: '2026',
+                        semester: '1학기',
+                        name: '경영정보시스템',
+                        published: true,
+                        _source: 'data.json'
+                    });
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        cachedAvailableCourses = Array.from(coursesMap.values());
+    }
+
+    // ── 과목 목록 가져오기 ──
+    function getAvailableCourses() {
+        if (cachedAvailableCourses && cachedAvailableCourses.length > 0) {
+            return cachedAvailableCourses;
+        }
+        // 캐시가 비어있을 때 동기 폴백
+        const list = [];
+        try {
+            const raw = localStorage.getItem('scorequery_courses');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed.length > 0) return parsed;
+            }
+        } catch { /* ignore */ }
+        return list;
     }
 
     // ── 학생모드 진입 시 과목 목록 채우기 ──
-    function populateStudentCourses() {
+    async function populateStudentCourses() {
+        await loadAvailableCoursesAsync();
         const courses = getAvailableCourses();
         courseSelect.innerHTML = '<option value="">과목을 선택하세요</option>';
         courseSelect.classList.add('select-unselected');

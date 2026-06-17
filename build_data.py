@@ -238,6 +238,15 @@ def build():
 
     # JSON 출력
     output = {
+        "course": {
+            "year": "2026",
+            "semester": "1학기",
+            "name": "경영정보시스템"
+        },
+        "professor": {
+            "name": "서창갑",
+            "email": "armour@tu.ac.kr"
+        },
         "students": students,
         "class_avg": class_averages,
         "class_max": class_maxes,

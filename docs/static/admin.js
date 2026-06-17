@@ -1748,6 +1748,15 @@
         }
 
         return {
+            course: {
+                year: adminConfig.course.year,
+                semester: adminConfig.course.semester,
+                name: adminConfig.course.name
+            },
+            professor: {
+                name: adminConfig.professor.name,
+                email: adminConfig.professor.email
+            },
             evaluation: adminConfig.evaluation,
             students,
             class_avg: classAvg,
