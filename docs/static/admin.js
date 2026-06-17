@@ -2095,6 +2095,19 @@
         const adminDeleteAccount = document.getElementById('admin-delete-account-btn');
         if (adminDeleteAccount) adminDeleteAccount.addEventListener('click', handleSelfDelete);
 
+        const infoMgmtBtn = document.getElementById('admin-info-mgmt-btn');
+        if (infoMgmtBtn) {
+            infoMgmtBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                infoMgmtBtn.parentElement.classList.toggle('active');
+            });
+        }
+        document.addEventListener('click', () => {
+            if (infoMgmtBtn) {
+                infoMgmtBtn.parentElement.classList.remove('active');
+            }
+        });
+
         try {
             const sess = sessionStorage.getItem('scorequery_session');
             if (sess) {
