@@ -235,6 +235,25 @@ def build():
         class_averages[str(cn)] = avg
         class_maxes[str(cn)] = mx
         class_counts[str(cn)] = data["count"]
+    # 기존 data.json에서 gas_url을 읽어오거나 config.json에서 불러오기
+    import os
+    gas_url = ""
+    try:
+        if os.path.exists(OUTPUT_FILE):
+            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+                old_data = json.load(f)
+                gas_url = old_data.get("gas_url", "")
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists("config.json"):
+            with open("config.json", "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                if cfg.get("gas_url"):
+                    gas_url = cfg.get("gas_url")
+    except Exception:
+        pass
 
     # JSON 출력
     output = {
@@ -247,13 +266,12 @@ def build():
             "name": "서창갑",
             "email": "armour@tu.ac.kr"
         },
+        "gas_url": gas_url,
         "students": students,
         "class_avg": class_averages,
         "class_max": class_maxes,
         "class_counts": class_counts,
     }
-
-    import os
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

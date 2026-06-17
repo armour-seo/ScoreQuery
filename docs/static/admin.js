@@ -150,25 +150,6 @@
             renderCourseSelector();
             renderCompleteSummary();
             renderViewStats();
-
-            // 교수용 GAS URL 로드 및 바인딩
-            const profGasInput = document.getElementById('prof-gas-url-input');
-            const profSaveBtn = document.getElementById('save-prof-gas-url-btn');
-            if (profGasInput && profSaveBtn) {
-                profGasInput.value = localStorage.getItem('scorequery_gas_url') || '';
-                profSaveBtn.onclick = () => {
-                    const url = profGasInput.value.trim();
-                    localStorage.setItem('scorequery_gas_url', url);
-                    const masterGasInput = document.getElementById('gas-url-input');
-                    if (masterGasInput) masterGasInput.value = url;
-                    alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
-                };
-            }
-
-            const profGasHelpBtn = document.getElementById('prof-gas-help-btn');
-            if (profGasHelpBtn) {
-                profGasHelpBtn.onclick = showGasGuideModal;
-            }
         } else {
             // 다른 단계로 복귀 시 마스터 패널이 활성화되어 있지 않다면 wide-layout 제거
             const masterPanel = document.getElementById('admin-master-panel');
@@ -614,11 +595,31 @@
         if (idx >= 0) {
             courseList[idx].publishDate = publishDate;
             courseList[idx].published = true;
+            if (currentUser) {
+                courseList[idx].professor = { name: currentUser.name, email: currentUser.email };
+            }
+            localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
+        } else {
+            courseList.push({
+                year: adminConfig.course.year,
+                semester: adminConfig.course.semester,
+                name: adminConfig.course.name,
+                publishDate: publishDate,
+                published: true,
+                professor: currentUser ? { name: currentUser.name, email: currentUser.email } : null
+            });
             localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
         }
 
         updatePublishStatusDisplay(info);
-        alert('📢 성적이 공시되었습니다!');
+
+        autoSaveDataJsonToServer().then(res => {
+            if (res && res.success) {
+                alert('📢 성적이 공시되었으며, 서버의 docs/data.json 파일로 자동 저장되었습니다!');
+            } else {
+                alert('📢 성적이 공시되었습니다!\n(로컬 백엔드 서버가 종료 상태이거나 연결할 수 없어 data.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 수동 저장해 주세요.)');
+            }
+        });
     }
 
     function unpublishGrades() {
@@ -708,6 +709,84 @@
         // 파일 다운로드 (강제 파일명: 년도-학기-과목명-교수명.xlsx)
         const fileName = `${course.year}-${course.semester}-${course.name}-${professor.name}.xlsx`;
         XLSX.writeFile(wb, fileName);
+    }
+
+    function getCompiledDataJson() {
+        const { course } = adminConfig;
+        if (!course || !course.name) return null;
+
+        const dataKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
+        const rawData = localStorage.getItem(dataKey);
+        if (!rawData) return null;
+
+        try {
+            const dataObj = JSON.parse(rawData);
+            // 최신 GAS URL과 교수 정보 반영
+            dataObj.gas_url = localStorage.getItem('scorequery_gas_url') || '';
+            if (currentUser) {
+                dataObj.professor = {
+                    name: currentUser.name,
+                    email: currentUser.email
+                };
+            }
+            return dataObj;
+        } catch (e) {
+            console.error('Failed to compile data.json object:', e);
+            return null;
+        }
+    }
+
+    function downloadDataJson() {
+        const dataObj = getCompiledDataJson();
+        if (!dataObj) {
+            alert('성적 데이터가 없습니다. 먼저 2단계에서 성적 파일을 업로드하고 확정해 주세요.');
+            return;
+        }
+
+        try {
+            // data.json 형식으로 다운로드
+            const jsonString = JSON.stringify(dataObj, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'data.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Failed to download data.json:', e);
+            alert('파일 다운로드 중 오류가 발생했습니다: ' + e.message);
+        }
+    }
+
+    async function autoSaveDataJsonToServer() {
+        const dataObj = getCompiledDataJson();
+        if (!dataObj) return { success: false, error: 'No data' };
+
+        try {
+            const response = await fetch('http://127.0.0.1:5000/api/save_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dataObj)
+            });
+            if (response.ok) {
+                const result = await response.json();
+                console.log('[ScoreQuery] Auto-save success:', result.message);
+                return { success: true, message: result.message };
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                console.warn('[ScoreQuery] Auto-save failed on server:', errData.error);
+                return { success: false, error: errData.error || 'Server error' };
+            }
+        } catch (e) {
+            console.warn('[ScoreQuery] Auto-save connection failed (Flask server might be offline):', e);
+            return { success: false, error: 'Connection failed' };
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -1574,7 +1653,15 @@
                 c.year === course.year && c.semester === course.semester && c.name === course.name
             );
             if (!exists) {
-                courseList.push({ year: course.year, semester: course.semester, name: course.name });
+                courseList.push({
+                    year: course.year,
+                    semester: course.semester,
+                    name: course.name,
+                    professor: currentUser ? { name: currentUser.name, email: currentUser.email } : null
+                });
+                localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
+            } else if (currentUser) {
+                exists.professor = { name: currentUser.name, email: currentUser.email };
                 localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
             }
 
@@ -1776,6 +1863,7 @@
                 name: adminConfig.professor.name,
                 email: adminConfig.professor.email
             },
+            gas_url: localStorage.getItem('scorequery_gas_url') || '',
             evaluation: adminConfig.evaluation,
             students,
             class_avg: classAvg,
@@ -1893,6 +1981,12 @@
         document.getElementById('btn-publish').addEventListener('click', publishGrades);
         document.getElementById('btn-unpublish').addEventListener('click', unpublishGrades);
 
+        // data.json 다운로드 버튼
+        const btnDownloadJson = document.getElementById('btn-download-json');
+        if (btnDownloadJson) {
+            btnDownloadJson.addEventListener('click', downloadDataJson);
+        }
+
         // Upload (파이프라인 버튼은 renderPipeline에서 동적 바인딩)
         setupUpload();
     }
@@ -1928,9 +2022,30 @@
         }
     }
 
+    async function syncGasUrlFromServer() {
+        try {
+            const res = await fetch('data.json?_t=' + Date.now());
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.gas_url) {
+                    localStorage.setItem('scorequery_gas_url', data.gas_url);
+                    const gasInput = document.getElementById('gas-url-input');
+                    if (gasInput) {
+                        gasInput.value = data.gas_url;
+                    }
+                    return data.gas_url;
+                }
+            }
+        } catch (e) {
+            console.warn('[ScoreQuery] Failed to sync GAS URL from server:', e);
+        }
+        return null;
+    }
+
     // ── 인증 세션 처리 초기화 ──
     async function initAuth() {
         await initUsersDB();
+        await syncGasUrlFromServer();
 
         const loginForm = document.getElementById('admin-login-form');
         if (loginForm) loginForm.addEventListener('submit', handleProfLogin);
@@ -2200,15 +2315,27 @@
         // GAS URL 로드 및 바인딩
         const gasInput = document.getElementById('gas-url-input');
         const saveBtn = document.getElementById('save-gas-url-btn');
-        if (gasInput && saveBtn) {
+        const loadGasBtn = document.getElementById('load-gas-url-btn');
+        if (gasInput) {
             gasInput.value = localStorage.getItem('scorequery_gas_url') || '';
-            saveBtn.onclick = () => {
-                const url = gasInput.value.trim();
-                localStorage.setItem('scorequery_gas_url', url);
-                const profGasInput = document.getElementById('prof-gas-url-input');
-                if (profGasInput) profGasInput.value = url;
-                alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
-            };
+            if (saveBtn) {
+                saveBtn.onclick = () => {
+                    const url = gasInput.value.trim();
+                    localStorage.setItem('scorequery_gas_url', url);
+                    alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
+                };
+            }
+            if (loadGasBtn) {
+                loadGasBtn.onclick = async () => {
+                    const loadedUrl = await syncGasUrlFromServer();
+                    if (loadedUrl) {
+                        gasInput.value = loadedUrl;
+                        alert('✅ 서버(data.json)로부터 자동 메일 발송 URL을 성공적으로 가져왔습니다.');
+                    } else {
+                        alert('ℹ️ 서버의 data.json 파일에 설정된 자동 메일 발송 URL이 없습니다.');
+                    }
+                };
+            }
         }
 
         const gasHelpBtn = document.getElementById('gas-help-btn');

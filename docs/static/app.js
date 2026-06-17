@@ -18,6 +18,9 @@
     const courseSelect = document.getElementById('stu-course-select');
     const authGroup = document.getElementById('student-auth-group');
 
+    let lockInterval = null;
+    let scheduleInterval = null;
+
     // ── Score Card Config ──
     // ── Dynamic Score Fields Resolver ──
     function getScoreFields(gradeData) {
@@ -180,6 +183,12 @@
                     published: c.published || false,
                     _source: c._source || 'local'
                 });
+            } else {
+                const existing = coursesMap.get(key);
+                if (c.published) existing.published = true;
+                if (c.professor) existing.professor = c.professor;
+                if (c.publishDate) existing.publishDate = c.publishDate;
+                if (c._source === 'data.json') existing._source = 'data.json';
             }
         };
 
@@ -206,9 +215,9 @@
             }
         } catch { /* ignore */ }
 
-        // 3) data.json 파일에서 비동기 조회 및 폴백
+        // 3) data.json 파일에서 비동기 조회 및 폴백 (캐시 방지 적용)
         try {
-            const res = await fetch('data.json');
+            const res = await fetch('data.json?_t=' + Date.now());
             if (res.ok) {
                 const parsed = await res.json();
                 if (parsed.course && parsed.course.name) {
@@ -307,9 +316,9 @@
             }
         } catch (e) { /* ignore */ }
 
-        // 3) data.json 파일
+        // 3) data.json 파일 (캐시 방지 적용)
         try {
-            const res = await fetch('data.json');
+            const res = await fetch('data.json?_t=' + Date.now());
             if (res.ok) {
                 const parsed = await res.json();
                 if (isValid(parsed)) {
@@ -725,7 +734,6 @@
         });
     }
 
-    let lockInterval = null;
     function checkStudentLock() {
         const lockUntil = localStorage.getItem('scorequery_lock_until');
         const timerEl = document.getElementById('student-lock-timer');
@@ -781,7 +789,6 @@
         return false;
     }
 
-    let scheduleInterval = null;
     function checkScheduleAndControl() {
         const scheduleRaw = localStorage.getItem('scorequery_schedule');
         const blockEl = document.getElementById('student-schedule-block');

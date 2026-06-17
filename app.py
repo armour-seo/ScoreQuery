@@ -6,6 +6,8 @@ ScoreQuery — 성적 조회 시스템 백엔드
 
 import math
 import re
+import os
+import json
 from flask import Flask, render_template, request, jsonify
 import openpyxl
 
@@ -227,6 +229,39 @@ def load_excel():
 
     wb.close()
     print(f"[ScoreQuery] {len(students)}명 학생 데이터 로드 완료 (분반 {len(class_averages)}개)")
+
+
+# ──────────────────────────────────────────────
+# CORS & Auto-save APIs
+# ──────────────────────────────────────────────
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    return response
+
+@app.route("/api/save_data", methods=["POST", "OPTIONS"])
+def save_data():
+    if request.method == "OPTIONS":
+        return "", 204
+        
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"error": "올바르지 않은 데이터 형식입니다."}), 400
+
+        # docs/data.json에 저장
+        output_path = os.path.join("docs", "data.json")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+
+        print(f"[ScoreQuery] data.json 자동으로 저장 완료 ({os.path.getsize(output_path)} bytes)")
+        return jsonify({"success": True, "message": "성적 데이터가 서버에 성공적으로 저장되었습니다."})
+    except Exception as e:
+        print(f"❌ 데이터 저장 중 오류 발생: {e}")
+        return jsonify({"error": f"데이터 저장 실패: {str(e)}"}), 500
 
 
 # ──────────────────────────────────────────────
