@@ -1082,7 +1082,7 @@
             pendingConvertedHeaders = converted.headers;
 
             // data.json 생성
-            const dataJson = await buildDataJson(rows, headers, mapping, evalPairs);
+            const dataJson = await buildDataJson(rows, headers, mapping, evalPairs, converted);
             pendingUploadData = dataJson;
 
             // ── 검증 보고서 업데이트 (정밀 검증 결과 포함) ──
@@ -1146,7 +1146,7 @@
 
             // 미리보기 클릭
             document.getElementById('pipe-preview').addEventListener('click', function() {
-                renderPreviewTable(rawRows, rawHeaders);
+                renderPreviewTable(converted.rows, converted.headers);
                 document.getElementById('upload-preview-table').style.display = '';
                 document.getElementById('preview-toolbar').style.display = '';
                 this.classList.remove('active');
@@ -1696,7 +1696,7 @@
         renderViewStats();
     }
 
-    async function buildDataJson(rows, headers, mapping, evalPairs) {
+    async function buildDataJson(rows, headers, mapping, evalPairs, converted = null) {
         const students = {};
         const classStudents = {};
 
@@ -1756,6 +1756,7 @@
         let mismatchDetails = [];
 
         // 2. 학생별 성적 변환 및 검증 루프
+        let rowIndex = 0;
         for (const row of rows) {
             const studentId = String(row[mapping.studentId] || '').trim();
             const name = String(row[mapping.name] || '').trim();
@@ -1814,6 +1815,21 @@
                     });
                 }
             }
+
+            // 변환된 행(미리보기 및 다운로드용) 데이터 동기화
+            if (converted && converted.headers && converted.rows) {
+                const cRow = converted.rows[rowIndex];
+                if (cRow) {
+                    evalPairs.forEach(({ evalItem }) => {
+                        const r = evalItem.ratio > 0 ? `(${evalItem.ratio}%)` : '';
+                        const headerName = `${evalItem.label}${r}`;
+                        const sVal = scores[`${evalItem.id}_score`];
+                        cRow[headerName] = sVal !== null ? sVal : '';
+                    });
+                    cRow['총점'] = finalCalculatedTotal;
+                }
+            }
+            rowIndex++;
 
             const entry = {
                 student_id_hash: studentIdHash,
