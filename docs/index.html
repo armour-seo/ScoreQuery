@@ -35,21 +35,40 @@
              MODE SELECTION
              ═══════════════════════════════════ -->
         <section class="mode-section" id="mode-section">
-            <div class="mode-header">
-                <h1>📊 ScoreQuery</h1>
+            <div class="ambient-light light-admin"></div>
+            <div class="ambient-light light-student"></div>
+
+            <div class="mode-header staggered-item" style="--delay: 0.1s">
+                <h1 class="gradient-text"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 8px; margin-bottom: 4px;"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>ScoreQuery</h1>
                 <p>성적 조회 · 관리 시스템</p>
             </div>
+            
             <div class="mode-cards">
-                <div class="mode-card mode-admin" id="mode-admin-btn">
-                    <span class="mode-card-icon">⚙️</span>
+                <div class="mode-card mode-admin staggered-item" style="--delay: 0.2s" id="mode-admin-btn">
+                    <div class="mode-card-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
                     <div class="mode-card-title">교수 모드</div>
                     <div class="mode-card-desc">과목을 설정하고<br>성적 템플릿을 생성합니다</div>
                 </div>
-                <div class="mode-card mode-student" id="mode-student-btn">
-                    <span class="mode-card-icon">🎓</span>
+                <div class="mode-card mode-student staggered-item" style="--delay: 0.3s" id="mode-student-btn">
+                    <div class="mode-card-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                    </div>
                     <div class="mode-card-title">학생 모드</div>
                     <div class="mode-card-desc">성적을 조회합니다<br>학번과 전화번호로 인증</div>
                 </div>
+            </div>
+
+            <!-- 새로 추가된 정보 메시지 -->
+            <div class="mode-info-box staggered-item" style="--delay: 0.4s">
+                <div class="info-badge">💡 Notice</div>
+                <p>이 시스템은 아모르교수의 개인 창작물이며 계속 버전업하고 있습니다.<br>교수님들께서는 학생들과는 다른 경로이용으로 부득이 <strong>회원가입의 절차</strong>를 마련하였습니다.</p>
+            </div>
+
+            <!-- Footer: Ver 1.1 -->
+            <div class="mode-footer staggered-item" style="--delay: 0.5s">
+                성적조회관리시스템 Ver1.1 by <span>아모르교수 (armour@tu.ac.kr)</span>
             </div>
         </section>
 
