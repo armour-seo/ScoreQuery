@@ -150,6 +150,25 @@
             renderCourseSelector();
             renderCompleteSummary();
             renderViewStats();
+
+            // 교수용 GAS URL 로드 및 바인딩
+            const profGasInput = document.getElementById('prof-gas-url-input');
+            const profSaveBtn = document.getElementById('save-prof-gas-url-btn');
+            if (profGasInput && profSaveBtn) {
+                profGasInput.value = localStorage.getItem('scorequery_gas_url') || '';
+                profSaveBtn.onclick = () => {
+                    const url = profGasInput.value.trim();
+                    localStorage.setItem('scorequery_gas_url', url);
+                    const masterGasInput = document.getElementById('gas-url-input');
+                    if (masterGasInput) masterGasInput.value = url;
+                    alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
+                };
+            }
+
+            const profGasHelpBtn = document.getElementById('prof-gas-help-btn');
+            if (profGasHelpBtn) {
+                profGasHelpBtn.onclick = showGasGuideModal;
+            }
         } else {
             // 다른 단계로 복귀 시 마스터 패널이 활성화되어 있지 않다면 wide-layout 제거
             const masterPanel = document.getElementById('admin-master-panel');
@@ -2186,6 +2205,8 @@
             saveBtn.onclick = () => {
                 const url = gasInput.value.trim();
                 localStorage.setItem('scorequery_gas_url', url);
+                const profGasInput = document.getElementById('prof-gas-url-input');
+                if (profGasInput) profGasInput.value = url;
                 alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
             };
         }
