@@ -79,38 +79,106 @@ def make_hash_key(student_id, phone_last4):
 
 def build():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-    ws = wb.active
+    
+    # 1. 사용할 시트 결정 (최종성적 -> 총괄 -> 첫 번째 시트 순)
+    sheet_name = None
+    for name in ["최종성적", "총괄"]:
+        if name in wb.sheetnames:
+            sheet_name = name
+            break
+    ws = wb[sheet_name] if sheet_name else wb.active
+    print(f"[build_data] 시트 '{ws.title}'에서 데이터를 읽어옵니다.")
+
+    # 2. 헤더 행 읽기 및 키워드 기반 동적 매핑
+    first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    headers = [str(cell).strip() if cell is not None else "" for cell in first_row]
+    
+    def find_idx(keywords):
+        for idx, h in enumerate(headers):
+            if any(kw in h for kw in keywords):
+                return idx
+        return None
+
+    col = {
+        "department": find_idx(["학과", "학부", "전공"]),
+        "class_num": find_idx(["분반", "반"]),
+        "student_id": find_idx(["학번"]),
+        "name": find_idx(["이름", "성명"]),
+        "phone": find_idx(["전화", "핸드폰", "연락처", "휴대폰"]),
+        "quiz_score": find_idx(["퀴즈"]),
+        "attendance": find_idx(["출석"]),
+        "midterm": find_idx(["중간"]),
+        "final": find_idx(["기말"]),
+        "total": find_idx(["총점"]),
+        "rank": find_idx(["석차", "순위", "등수"]),
+        "grade": find_idx(["학점", "평점", "등급"]),
+        "absences": find_idx(["결석"]),
+        "remark": find_idx(["비고"]),
+    }
+
+    # 필수 컬럼(학번, 이름)이 감지되지 않으면 에러
+    if col["student_id"] is None or col["name"] is None:
+        raise ValueError("❌ Excel 파일에서 필수 컬럼('학번', '이름')을 찾을 수 없습니다.")
 
     students = {}
     class_scores = {}
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
-        sid = row[COL["student_id"]]
+        if len(row) <= col["student_id"]:
+            continue
+            
+        sid = row[col["student_id"]]
         if sid is None:
             continue
 
-        sid = int(sid)
-        class_num = int(row[COL["class_num"]]) if row[COL["class_num"]] else 0
-        phone_last4 = extract_phone_last4(row[COL["phone"]])
+        try:
+            # 학번이 숫자가 아닌 경우 건너뛰기
+            sid = int(float(str(sid).strip()))
+        except (ValueError, TypeError):
+            continue
+
+        class_num = 1
+        if col["class_num"] is not None and col["class_num"] < len(row) and row[col["class_num"]] is not None:
+            try:
+                class_num = int(float(str(row[col["class_num"]]).strip()))
+            except ValueError:
+                class_num = 1
+
+        phone_val = row[col["phone"]] if col["phone"] is not None and col["phone"] < len(row) else ""
+        phone_last4 = extract_phone_last4(phone_val)
 
         # 해시 키 생성
         hash_key = make_hash_key(sid, phone_last4)
 
-        quiz = safe_float(row[COL["quiz_score"]])
-        attendance = safe_float(row[COL["attendance"]])
-        midterm = safe_float(row[COL["midterm"]])
-        final = safe_float(row[COL["final"]])
-        total = safe_float(row[COL["total"]])
-        rank_val = row[COL["rank"]]
-        grade = row[COL["grade"]] or ""
-        absences = int(row[COL["absences"]]) if row[COL["absences"]] is not None else 0
-        remark = row[COL["remark"]] or ""
+        def get_val(key, default=None):
+            idx = col[key]
+            if idx is not None and idx < len(row):
+                return row[idx]
+            return default
+
+        quiz = safe_float(get_val("quiz_score"))
+        attendance = safe_float(get_val("attendance"))
+        midterm = safe_float(get_val("midterm"))
+        final = safe_float(get_val("final"))
+        total = safe_float(get_val("total"))
+        rank_val = get_val("rank")
+        grade = get_val("grade") or ""
+        
+        absences_val = get_val("absences", 0)
+        try:
+            absences = int(float(str(absences_val).strip())) if absences_val is not None else 0
+        except ValueError:
+            absences = 0
+            
+        remark = get_val("remark") or ""
+        dept = get_val("department") or ""
+        student_name = get_val("name") or ""
 
         students[hash_key] = {
-            "department": row[COL["department"]] or "",
+            "department": dept,
             "class_num": class_num,
             "student_id_masked": mask_student_id(sid),
-            "name_masked": mask_name(row[COL["name"]]),
+            "name_masked": mask_name(student_name),
             "quiz_score": quiz,
             "attendance_score": attendance,
             "midterm_score": midterm,
@@ -142,8 +210,9 @@ def build():
     for hk, st in students.items():
         cn = st["class_num"]
         count = class_scores[cn]["count"]
-        if st["rank"] is not None:
-            st["rank"] = f"{st['rank']} / {count}"
+        if st["rank"] is not None and str(st["rank"]).strip() not in ["", "-"]:
+            r_str = str(st["rank"]).split("/")[0].strip()
+            st["rank"] = f"{r_str} / {count}"
         else:
             st["rank"] = "- / -"
 
@@ -182,7 +251,7 @@ def build():
         json.dump(output, f, ensure_ascii=False, separators=(",", ":"))
 
     wb.close()
-    print(f"✅ {len(students)}명 데이터 → {OUTPUT_FILE} 생성 완료")
+    print(f"[build_data] {len(students)}명 데이터 -> {OUTPUT_FILE} 생성 완료")
     print(f"   분반: {len(class_averages)}개, 파일크기: {os.path.getsize(OUTPUT_FILE):,} bytes")
     print(f"   키 방식: SHA-256(학번|전화번호뒷4자리)")
 

@@ -19,13 +19,29 @@
     const authGroup = document.getElementById('student-auth-group');
 
     // ── Score Card Config ──
-    const SCORE_FIELDS = [
-        { key: 'quiz_score', label: '퀴즈', icon: '🎯', max: 30, cssClass: 'card-quiz' },
-        { key: 'attendance_score', label: '출석', icon: '📋', max: 30, cssClass: 'card-attendance' },
-        { key: 'midterm_score', label: '중간고사', icon: '📝', max: 20, cssClass: 'card-midterm' },
-        { key: 'final_score', label: '기말고사', icon: '📖', max: 20, cssClass: 'card-final' },
-        { key: 'total_score', label: '총점', icon: '🏆', max: 100, cssClass: 'card-total' },
-    ];
+    // ── Dynamic Score Fields Resolver ──
+    function getScoreFields(gradeData) {
+        if (gradeData && gradeData.evaluation && gradeData.evaluation.length > 0) {
+            const fields = gradeData.evaluation.map(e => ({
+                key: `${e.id}_score`,
+                label: e.label,
+                icon: e.icon || '📊',
+                max: e.ratio || 100,
+                cssClass: `card-${e.id}`
+            }));
+            fields.push({ key: 'total_score', label: '총점', icon: '🏆', max: 100, cssClass: 'card-total' });
+            return fields;
+        }
+
+        // Fallback for legacy format
+        return [
+            { key: 'quiz_score', label: '퀴즈', icon: '🎯', max: 30, cssClass: 'card-quiz' },
+            { key: 'attendance_score', label: '출석', icon: '📋', max: 30, cssClass: 'card-attendance' },
+            { key: 'midterm_score', label: '중간고사', icon: '📝', max: 20, cssClass: 'card-midterm' },
+            { key: 'final_score', label: '기말고사', icon: '📖', max: 20, cssClass: 'card-final' },
+            { key: 'total_score', label: '총점', icon: '🏆', max: 100, cssClass: 'card-total' },
+        ];
+    }
 
     // ── State ──
     let radarChart = null;
@@ -42,6 +58,23 @@
 
     studentIdInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
+
+    // 학생 모드 진입 버튼 클릭 시 락 및 일정 체크
+    const studentModeBtn = document.getElementById('mode-student-btn');
+    if (studentModeBtn) {
+        studentModeBtn.addEventListener('click', () => {
+            checkStudentLock();
+            checkScheduleAndControl();
+        });
+    }
+
+    // 즉시 및 로드 시 체크
+    checkStudentLock();
+    checkScheduleAndControl();
+    document.addEventListener('DOMContentLoaded', () => {
+        checkStudentLock();
+        checkScheduleAndControl();
     });
 
     // 과목 선택 시 공시 상태 확인 후 인증 필드 표시
@@ -212,6 +245,11 @@
         e.preventDefault();
         hideError();
 
+        if (checkStudentLock()) {
+            showError('❌ 무단 조회 방지를 위해 조회 기능이 잠겨 있습니다.');
+            return;
+        }
+
         if (!selectedCourse) {
             showError('과목을 먼저 선택해 주세요.');
             return;
@@ -254,9 +292,38 @@
             }
 
             if (!foundStudent) {
-                showError('일치하는 정보를 찾을 수 없습니다.\n학번과 전화번호를 다시 확인해 주세요.');
+                let fails = parseInt(localStorage.getItem('scorequery_fail_count') || '0');
+                fails++;
+                localStorage.setItem('scorequery_fail_count', fails);
+                if (fails >= 5) {
+                    localStorage.setItem('scorequery_lock_until', Date.now() + 10 * 60 * 1000);
+                    localStorage.removeItem('scorequery_fail_count');
+                    checkStudentLock();
+                    showError('❌ 5회 연속 실패하여 10분간 조회가 잠금되었습니다.');
+                } else {
+                    showError(`일치하는 정보를 찾을 수 없습니다. (실패 횟수: ${fails}/5)\n학번과 전화번호를 다시 확인해 주세요.`);
+                }
                 setLoading(false);
                 return;
+            }
+
+            // 로그인 성공 시 실패 횟수 초기화 및 비식별 로그 적재
+            localStorage.removeItem('scorequery_fail_count');
+            
+            const sidHash = await sha256(studentId);
+            const subjectId = `${selectedCourse.year}_${selectedCourse.semester}_${selectedCourse.name}`;
+            let viewLogs = [];
+            try {
+                viewLogs = JSON.parse(localStorage.getItem('scorequery_view_logs') || '[]');
+            } catch (err) {}
+            const alreadyLogged = viewLogs.some(log => log.subjectId === subjectId && log.sidHash === sidHash);
+            if (!alreadyLogged) {
+                viewLogs.push({
+                    subjectId,
+                    sidHash,
+                    viewDate: new Date().toISOString()
+                });
+                localStorage.setItem('scorequery_view_logs', JSON.stringify(viewLogs));
             }
 
             gradeData = foundData;
@@ -335,7 +402,7 @@
         const container = document.getElementById('score-cards');
         container.innerHTML = '';
 
-        SCORE_FIELDS.forEach((field) => {
+        getScoreFields(gradeData).forEach((field) => {
             const value = student[field.key];
             const avg = classAvg[field.key];
             const displayVal = value !== null && value !== undefined ? value : '-';
@@ -392,7 +459,7 @@
         const avgData = [];
         const maxData = [];
 
-        SCORE_FIELDS.forEach((field) => {
+        getScoreFields(gradeData).forEach((field) => {
             labels.push(field.label);
             const myVal = student[field.key];
             const avgVal = classAvg[field.key];
@@ -567,6 +634,168 @@
         });
     }
 
+    let lockInterval = null;
+    function checkStudentLock() {
+        const lockUntil = localStorage.getItem('scorequery_lock_until');
+        const timerEl = document.getElementById('student-lock-timer');
+        if (!timerEl) return false;
+
+        if (lockUntil) {
+            const remaining = parseInt(lockUntil) - Date.now();
+            if (remaining > 0) {
+                // Lock active
+                timerEl.style.display = 'block';
+                studentIdInput.disabled = true;
+                phoneLast4Input.disabled = true;
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.5';
+
+                // Update timer text
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                timerEl.textContent = `❌ 무단 조회 방지를 위해 잠금되었습니다. 남은 시간: ${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+
+                if (!lockInterval) {
+                    lockInterval = setInterval(checkStudentLock, 1000);
+                }
+                return true;
+            }
+        }
+
+        // Unlock or no lock
+        if (lockInterval) {
+            clearInterval(lockInterval);
+            lockInterval = null;
+        }
+        timerEl.style.display = 'none';
+        
+        // Only re-enable if schedule is not blocking
+        const scheduleRaw = localStorage.getItem('scorequery_schedule');
+        let scheduleBlocks = false;
+        if (scheduleRaw) {
+            try {
+                const sched = JSON.parse(scheduleRaw);
+                const now = new Date();
+                if (sched.start && now < new Date(sched.start)) scheduleBlocks = true;
+                if (sched.end && now > new Date(sched.end)) scheduleBlocks = true;
+            } catch (e) {}
+        }
+        
+        if (!scheduleBlocks) {
+            studentIdInput.disabled = false;
+            phoneLast4Input.disabled = false;
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '';
+        }
+        return false;
+    }
+
+    let scheduleInterval = null;
+    function checkScheduleAndControl() {
+        const scheduleRaw = localStorage.getItem('scorequery_schedule');
+        const blockEl = document.getElementById('student-schedule-block');
+        if (!blockEl) return;
+
+        if (!scheduleRaw) {
+            blockEl.style.display = 'none';
+            loginForm.style.display = '';
+            if (scheduleInterval) {
+                clearInterval(scheduleInterval);
+                scheduleInterval = null;
+            }
+            return;
+        }
+
+        try {
+            const sched = JSON.parse(scheduleRaw);
+            const { start, end, notice } = sched;
+            const now = new Date();
+
+            let isBefore = false;
+            let isAfter = false;
+            let diff = 0;
+
+            if (start) {
+                const startDate = new Date(start);
+                if (now < startDate) {
+                    isBefore = true;
+                    diff = startDate - now;
+                }
+            }
+
+            if (end && !isBefore) {
+                const endDate = new Date(end);
+                if (now > endDate) {
+                    isAfter = true;
+                }
+            }
+
+            if (isBefore) {
+                blockEl.style.display = 'block';
+                loginForm.style.display = 'none';
+
+                const days = Math.floor(diff / 86400000);
+                const hours = Math.floor((diff % 86400000) / 3600000);
+                const mins = Math.floor((diff % 3600000) / 60000);
+                const secs = Math.floor((diff % 60000) / 1000);
+                
+                let countdownStr = days > 0 ? `D-${days}일 ` : '';
+                countdownStr += `${String(hours).padStart(2, '0')}시간 ${String(mins).padStart(2, '0')}분 ${String(secs).padStart(2, '0')}초`;
+
+                blockEl.innerHTML = `
+                    <div style="text-align: center; padding: 24px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-xl);">
+                        <span style="font-size: 40px; display: block; margin-bottom: 12px;">⏳</span>
+                        <h3 style="margin: 0 0 8px 0; color: #fbbf24; font-size: 1.125rem;">성적 조회 개시 전</h3>
+                        <p style="margin: 0 0 16px 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">아직 성적 조회 기간이 아닙니다. 아래 카운트다운 종료 후 조회가 가능합니다.</p>
+                        <div style="font-size: 1.25rem; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 10px; display: inline-block; min-width: 200px;">
+                            ${countdownStr}
+                        </div>
+                        ${notice ? `<div style="margin-top: 16px; font-size: 0.85rem; color: #cbd5e1; border-top: 1px solid var(--border-glass); padding-top: 12px; line-height: 1.5;">📢 ${notice}</div>` : ''}
+                    </div>
+                `;
+
+                if (!scheduleInterval) {
+                    scheduleInterval = setInterval(checkScheduleAndControl, 1000);
+                }
+                return;
+            }
+
+            if (isAfter) {
+                blockEl.style.display = 'block';
+                loginForm.style.display = 'none';
+                blockEl.innerHTML = `
+                    <div style="text-align: center; padding: 24px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-xl);">
+                        <span style="font-size: 40px; display: block; margin-bottom: 12px;">❌</span>
+                        <h3 style="margin: 0 0 8px 0; color: #ef4444; font-size: 1.125rem;">성적 조회 마감</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">이번 학기 성적 조회가 마감되었습니다.</p>
+                        ${notice ? `<div style="margin-top: 16px; font-size: 0.85rem; color: #cbd5e1; border-top: 1px solid var(--border-glass); padding-top: 12px; line-height: 1.5;">📢 ${notice}</div>` : ''}
+                    </div>
+                `;
+
+                if (scheduleInterval) {
+                    clearInterval(scheduleInterval);
+                    scheduleInterval = null;
+                }
+                return;
+            }
+
+            // Normal period
+            blockEl.style.display = 'none';
+            loginForm.style.display = '';
+            if (scheduleInterval) {
+                clearInterval(scheduleInterval);
+                scheduleInterval = null;
+            }
+
+        } catch (e) {
+            console.error('Schedule check error:', e);
+            blockEl.style.display = 'none';
+            loginForm.style.display = '';
+        }
+    }
+
     // Expose for admin.js
     window.populateStudentCourses = populateStudentCourses;
+    window.checkStudentLock = checkStudentLock;
+    window.checkScheduleAndControl = checkScheduleAndControl;
 })();

@@ -1000,6 +1000,20 @@ select.select-unselected option {
     max-width: 640px;
     margin: 0 auto;
     animation: fadeSlideUp 0.5s ease-out;
+    transition: max-width 0.4s ease;
+}
+
+.container.wide-layout {
+    max-width: 96vw !important;
+    width: 96% !important;
+    padding-left: var(--space-md) !important;
+    padding-right: var(--space-md) !important;
+    transition: max-width 0.4s ease, width 0.4s ease;
+}
+
+.admin-section.wide-layout {
+    max-width: 100% !important;
+    width: 100% !important;
 }
 
 .admin-section.visible {
@@ -1917,4 +1931,355 @@ select.select-unselected option {
     .wizard-card {
         padding: var(--space-lg);
     }
+}
+
+/* ══════════════════════════════════════════════
+   ADMIN AUTH & REGISTRATION STYLES
+   ══════════════════════════════════════════════ */
+.auth-panel {
+    width: 100%;
+    max-width: 480px;
+    animation: fadeSlideUp 0.6s ease-out;
+    display: flex;
+    justify-content: center;
+}
+
+#admin-master-panel {
+    max-width: 1000px;
+    width: 95%;
+}
+
+.auth-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    width: 100%;
+    box-shadow: var(--shadow-lg), var(--shadow-glow-blue);
+    position: relative;
+    overflow: hidden;
+}
+
+.auth-card-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: var(--space-xs);
+    letter-spacing: -0.02em;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.auth-card-subtitle {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: var(--space-xl);
+    line-height: 1.5;
+}
+
+.auth-toggle-link {
+    margin-top: var(--space-lg);
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.auth-toggle-link a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: 600;
+    margin-left: 4px;
+    transition: color var(--transition-fast);
+}
+
+.auth-toggle-link a:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+}
+
+.auth-error-message {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    color: #fca5a5;
+    padding: 10px 14px;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    margin-top: var(--space-md);
+    animation: fadeIn var(--transition-normal);
+}
+
+/* ⏳ Pending Card */
+.pending-card {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(245, 158, 11, 0.1);
+}
+
+.pending-icon {
+    font-size: 3.5rem;
+    margin-bottom: var(--space-md);
+    animation: pulseHourglass 2s infinite ease-in-out;
+    display: inline-block;
+}
+
+@keyframes pulseHourglass {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.1) rotate(180deg); }
+}
+
+.pending-details-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    padding-bottom: 6px;
+}
+
+.pending-details-row:last-child {
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.pending-details-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.pending-details-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.pending-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin-top: var(--space-sm);
+}
+
+/* 👑 Master Dashboard Card */
+.master-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    width: 100%;
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(139, 92, 246, 0.15);
+    animation: fadeSlideUp 0.6s ease-out;
+}
+
+.master-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.master-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.master-subtitle {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-lg);
+}
+
+.master-table-wrap {
+    overflow-x: auto;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-glass);
+}
+
+.master-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.8125rem;
+    min-width: 950px;
+}
+
+.master-table th {
+    padding: 12px var(--space-md);
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.02);
+    white-space: nowrap;
+}
+
+.master-table td {
+    padding: 12px var(--space-md);
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    white-space: nowrap;
+}
+
+.master-table tr:last-child td {
+    border-bottom: none;
+}
+
+.master-table tr:hover td {
+    background: rgba(255, 255, 255, 0.01);
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.status-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-badge.approved {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-badge.rejected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.status-badge.deleted {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Master Action Buttons */
+.master-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.btn-approve {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+}
+
+.btn-approve:hover {
+    opacity: 0.9;
+}
+
+.btn-reject {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-reject:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-reset-pw {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+}
+
+.btn-reset-pw:hover {
+    opacity: 0.9;
+}
+
+.btn-delete-user {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-delete-user:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: #ef4444;
+    color: #fff;
+}
+
+.wizard-logout-row {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-bottom: var(--space-md);
+}
+
+/* ── 비밀번호 안전도 게이지 ── */
+.pw-strength-wrapper {
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+}
+
+.pw-strength-bg {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+    gap: 2px;
+}
+
+/* ── 수강생 열람율 통계 위젯 및 일정 안내 카드 ── */
+.stats-widget-card {
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.stats-widget-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(56, 189, 248, 0.1);
+}
+
+.schedule-notice-card,
+.lock-timer-card {
+    animation: fadeSlideUp 0.5s ease-out;
 }

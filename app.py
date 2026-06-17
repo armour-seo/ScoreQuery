@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 ScoreQuery — 성적 조회 시스템 백엔드
 2026-1학기 MIS 과목 성적 마감 후 학생 개인 성적 조회 API
@@ -78,37 +78,116 @@ def extract_phone_last4(phone: str) -> str:
 
 def load_excel():
     """서버 시작 시 Excel 파일을 로드하여 메모리에 캐싱"""
-    global students, class_averages, class_counts
+    global students, class_averages, class_maxes, class_counts
 
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-    ws = wb.active
+    
+    # 1. 사용할 시트 결정 (최종성적 -> 총괄 -> 첫 번째 시트 순)
+    sheet_name = None
+    for name in ["최종성적", "총괄"]:
+        if name in wb.sheetnames:
+            sheet_name = name
+            break
+    ws = wb[sheet_name] if sheet_name else wb.active
+    print(f"[ScoreQuery] 시트 '{ws.title}'에서 데이터를 로드합니다.")
+
+    # 2. 헤더 행 읽기 및 키워드 기반 동적 매핑
+    first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    headers = [str(cell).strip() if cell is not None else "" for cell in first_row]
+    
+    def find_idx(keywords):
+        for idx, h in enumerate(headers):
+            if any(kw in h for kw in keywords):
+                return idx
+        return None
+
+    col = {
+        "department": find_idx(["학과", "학부", "전공"]),
+        "class_num": find_idx(["분반", "반"]),
+        "student_id": find_idx(["학번"]),
+        "name": find_idx(["이름", "성명"]),
+        "phone": find_idx(["전화", "핸드폰", "연락처", "휴대폰"]),
+        "quiz_score": find_idx(["퀴즈"]),
+        "attendance": find_idx(["출석"]),
+        "midterm": find_idx(["중간"]),
+        "final": find_idx(["기말"]),
+        "total": find_idx(["총점"]),
+        "rank": find_idx(["석차", "순위", "등수"]),
+        "grade": find_idx(["학점", "평점", "등급"]),
+        "absences": find_idx(["결석"]),
+        "remark": find_idx(["비고"]),
+    }
+
+    # 필수 컬럼(학번, 이름)이 감지되지 않으면 에러
+    if col["student_id"] is None or col["name"] is None:
+        raise ValueError("❌ Excel 파일에서 필수 컬럼('학번', '이름')을 찾을 수 없습니다.")
 
     # 분반별 점수 집계용
     class_scores = {}  # {class_num: {field: [values]}}
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
-        sid = row[COL["student_id"]]
+        if len(row) <= col["student_id"]:
+            continue
+            
+        sid = row[col["student_id"]]
         if sid is None:
             continue
 
-        sid = int(sid)
-        class_num = int(row[COL["class_num"]]) if row[COL["class_num"]] else 0
+        try:
+            # 학번이 숫자가 아닌 경우 건너뛰기
+            sid = int(float(str(sid).strip()))
+        except (ValueError, TypeError):
+            continue
+
+        class_num = 1
+        if col["class_num"] is not None and col["class_num"] < len(row) and row[col["class_num"]] is not None:
+            try:
+                class_num = int(float(str(row[col["class_num"]]).strip()))
+            except ValueError:
+                class_num = 1
+
+        phone_val = row[col["phone"]] if col["phone"] is not None and col["phone"] < len(row) else ""
+        phone_last4 = extract_phone_last4(phone_val)
+
+        def get_val(key, default=None):
+            idx = col[key]
+            if idx is not None and idx < len(row):
+                return row[idx]
+            return default
+
+        quiz = safe_float(get_val("quiz_score"))
+        attendance = safe_float(get_val("attendance"))
+        midterm = safe_float(get_val("midterm"))
+        final = safe_float(get_val("final"))
+        total = safe_float(get_val("total"))
+        rank_val = get_val("rank")
+        grade = get_val("grade") or ""
+        
+        absences_val = get_val("absences", 0)
+        try:
+            absences = int(float(str(absences_val).strip())) if absences_val is not None else 0
+        except ValueError:
+            absences = 0
+            
+        remark = get_val("remark") or ""
+        dept = get_val("department") or ""
+        student_name = get_val("name") or ""
 
         student = {
-            "department": row[COL["department"]] or "",
+            "department": dept,
             "class_num": class_num,
             "student_id": sid,
-            "name": row[COL["name"]] or "",
-            "phone_last4": extract_phone_last4(row[COL["phone"]]),
-            "quiz_score": safe_float(row[COL["quiz_score"]]),
-            "attendance_score": safe_float(row[COL["attendance"]]),
-            "midterm_score": safe_float(row[COL["midterm"]]),
-            "final_score": safe_float(row[COL["final"]]),
-            "total_score": safe_float(row[COL["total"]]),
-            "rank": row[COL["rank"]],
-            "grade": row[COL["grade"]] or "",
-            "absences": int(row[COL["absences"]]) if row[COL["absences"]] is not None else 0,
-            "remark": row[COL["remark"]] or "",
+            "name": student_name,
+            "phone_last4": phone_last4,
+            "quiz_score": quiz,
+            "attendance_score": attendance,
+            "midterm_score": midterm,
+            "final_score": final,
+            "total_score": total,
+            "rank": rank_val,
+            "grade": grade,
+            "absences": absences,
+            "remark": remark,
         }
 
         students[sid] = student
@@ -124,7 +203,8 @@ def load_excel():
             }
 
         for field in class_scores[class_num]:
-            val = student[field]
+            student_field = field if "score" in field else f"{field}_score"
+            val = student[student_field]
             if val is not None:
                 class_scores[class_num][field].append(val)
 

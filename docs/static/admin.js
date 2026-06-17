@@ -19,6 +19,7 @@
 
     // ── State ──
     let currentStep = 1;
+    let currentUser = null; // 로그인 세션 변수 추가
     let adminConfig = {
         professor: { name: '', email: '', phone: '' },
         course: { year: '', semester: '', name: '' },
@@ -33,6 +34,7 @@
     const topBar         = document.getElementById('top-bar');
     const topBarTitle    = document.getElementById('top-bar-title');
     const topBarProf     = document.getElementById('top-bar-prof');
+    const mainContainer  = document.querySelector('.container');
 
     const modeAdminBtn   = document.getElementById('mode-admin-btn');
     const modeStudentBtn = document.getElementById('mode-student-btn');
@@ -42,6 +44,7 @@
     try {
         initYearOptions();
         initEvalCriteria();
+        initAuth();
         bindEvents();
         console.log('[ScoreQuery Admin] Initialized successfully');
     } catch (err) {
@@ -88,7 +91,29 @@
         adminSection.classList.add('visible');
         topBarTitle.textContent = '⚙️ 교수 모드 — 과목 설정';
         topBarProf.textContent = '';
-        goToStep(1);
+        // 세션 로드 체크 후 분기
+        const sess = sessionStorage.getItem('scorequery_session');
+        if (sess) {
+            const user = JSON.parse(sess);
+            currentUser = user;
+            if (user.isMaster) {
+                showMasterDashboard();
+            } else if (user.status === 'approved') {
+                enterAdminWizard();
+            } else if (user.status === 'pending') {
+                showPendingView(user);
+            } else {
+                handleLogoutAction();
+            }
+        } else {
+            // 로그인 화면 노출
+            document.getElementById('admin-auth-panel').style.display = '';
+            document.getElementById('admin-login-card').style.display = '';
+            document.getElementById('admin-register-card').style.display = 'none';
+            document.getElementById('admin-pending-panel').style.display = 'none';
+            document.getElementById('admin-master-panel').style.display = 'none';
+            document.getElementById('admin-wizard-container').style.display = 'none';
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -116,10 +141,25 @@
             c.classList.toggle('completed', i + 1 < step);
         });
 
-        // Step 4 = complete
+        // Step 4 = complete (레이아웃 확장 추가)
         if (step === 4) {
+            adminSection.classList.add('wide-layout');
+            if (mainContainer) {
+                mainContainer.classList.add('wide-layout');
+            }
             renderCourseSelector();
             renderCompleteSummary();
+            renderViewStats();
+        } else {
+            // 다른 단계로 복귀 시 마스터 패널이 활성화되어 있지 않다면 wide-layout 제거
+            const masterPanel = document.getElementById('admin-master-panel');
+            const isMasterActive = masterPanel && masterPanel.style.display !== 'none';
+            if (!isMasterActive) {
+                adminSection.classList.remove('wide-layout');
+                if (mainContainer) {
+                    mainContainer.classList.remove('wide-layout');
+                }
+            }
         }
 
         // Step 2 = 과목명 자동완성 목록 채우기
@@ -261,6 +301,7 @@
         adminConfig.course = { year: c.year, semester: c.semester, name: c.name };
         adminConfig.evaluation = c.evaluation ? [...c.evaluation] : [];
         renderCompleteSummary();
+        renderViewStats();
     }
 
     function addAnotherCourse() {
@@ -938,6 +979,9 @@
             const dataJson = await buildDataJson(rows, headers, mapping, evalPairs);
             pendingUploadData = dataJson;
 
+            // ── 검증 보고서 업데이트 (정밀 검증 결과 포함) ──
+            renderValidationReport(validation, file.name, headers.length, rows.length, dataJson);
+
             // ── 파이프라인 렌더링 ──
             renderPipeline(pipelineIsStandard, rows, headers, converted);
 
@@ -1245,7 +1289,7 @@
     }
 
     // ── 검증 보고서 렌더링 ──
-    function renderValidationReport(validation, fileName, colCount, rowCount) {
+    function renderValidationReport(validation, fileName, colCount, rowCount, dataJson = null) {
         const el = document.getElementById('upload-validation');
 
         const checksHtml = validation.checks.map(c => {
@@ -1256,6 +1300,39 @@
                 <span class="v-value">${c.detail}</span>
             </div>`;
         }).join('');
+
+        let strictVerificationHtml = '';
+        if (dataJson && dataJson.verificationReport) {
+            const report = dataJson.verificationReport;
+            const modelText = report.useWeightedScaling
+                ? '🔢 <strong>백분율 환산 적용됨</strong> (입력된 100점 만점 원본 점수를 설정된 평가 비율에 맞춰 자동 환산하여 데이터베이스에 반영했습니다)'
+                : '✅ <strong>비율 반영 완료</strong> (엑셀에 입력된 값에 추가 비율 가중치 변환 없이 그대로 수집 처리했습니다)';
+                
+            let mismatchAlert = '';
+            if (report.totalMismatches > 0) {
+                mismatchAlert = `
+                    <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 12px; color: #fde047; line-height: 1.5; text-align: left;">
+                        ⚠️ <strong>합계 불일치 감지 (${report.totalMismatches}건):</strong> 엑셀의 총점 필드값과 항목별 가중합산(출석+평가+특별점수) 결과가 다른 학생이 발견되었습니다. 시스템에서 수식 정합성을 보장하기 위해 <strong>비율 가중합산 값으로 자동 보정</strong>했습니다.
+                    </div>
+                `;
+            } else {
+                mismatchAlert = `
+                    <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 12px; color: #86efac; line-height: 1.5; text-align: left;">
+                        ✅ 모든 학생의 항목별 가중합산과 엑셀 내 기재된 총점이 100% 완벽히 일치합니다.
+                    </div>
+                `;
+            }
+
+            strictVerificationHtml = `
+                <div class="validation-section" style="margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 16px;">
+                    <div class="validation-section-title" style="color: #38bdf8; font-weight: 700; margin-bottom: 8px;">🔬 성적 산출 및 비율 정밀 검증</div>
+                    <div class="validation-item pass" style="text-align: left; font-size: 12px; line-height: 1.6; padding: 10px 12px;">
+                        ${modelText}
+                    </div>
+                    ${mismatchAlert}
+                </div>
+            `;
+        }
 
         el.innerHTML = `
             <div class="validation-report">
@@ -1272,6 +1349,7 @@
                     <div class="validation-section-title">컬럼 검증 결과</div>
                     ${checksHtml}
                 </div>
+                ${strictVerificationHtml}
                 <div class="validation-stats">
                     <div class="validation-stat">
                         <div class="validation-stat-value">${rowCount}</div>
@@ -1471,12 +1549,69 @@
 
         // 공시 영역 표시
         showPublishArea();
+        renderViewStats();
     }
 
     async function buildDataJson(rows, headers, mapping, evalPairs) {
         const students = {};
         const classStudents = {};
 
+        // 1. 성적 자동 가중치 환산 여부 판단 알고리즘
+        let useWeightedScaling = false;
+        let anyExceedsRatio = false;
+        let totalMatchesWeighted = 0;
+        let totalMatchesRaw = 0;
+        let validComparisons = 0;
+
+        for (const row of rows) {
+            const studentId = String(row[mapping.studentId] || '').trim();
+            if (!studentId) continue;
+
+            let rowRawSum = 0;
+            let rowWeightedSum = 0;
+            let hasScores = false;
+
+            evalPairs.forEach(({ evalItem, colName }) => {
+                if (colName) {
+                    const val = parseFloat(row[colName]);
+                    if (!isNaN(val)) {
+                        hasScores = true;
+                        rowRawSum += val;
+                        rowWeightedSum += val * (evalItem.ratio / 100);
+                        if (val > evalItem.ratio) {
+                            anyExceedsRatio = true;
+                        }
+                    }
+                }
+            });
+
+            if (mapping.total && hasScores) {
+                const excelTotal = parseFloat(row[mapping.total]);
+                const specialScore = mapping.special ? (parseFloat(row[mapping.special]) || 0) : 0;
+                if (!isNaN(excelTotal)) {
+                    validComparisons++;
+                    const diffRaw = Math.abs((rowRawSum + specialScore) - excelTotal);
+                    const diffWeighted = Math.abs((rowWeightedSum + specialScore) - excelTotal);
+                    
+                    if (diffWeighted < diffRaw && diffRaw > 2.0) {
+                        totalMatchesWeighted++;
+                    } else if (diffRaw < diffWeighted && diffWeighted > 2.0) {
+                        totalMatchesRaw++;
+                    }
+                }
+            }
+        }
+
+        if (anyExceedsRatio) {
+            useWeightedScaling = true;
+        } else if (validComparisons > 0 && totalMatchesWeighted > totalMatchesRaw) {
+            useWeightedScaling = true;
+        }
+
+        let totalMismatches = 0;
+        let mismatchDetails = [];
+
+        // 2. 학생별 성적 변환 및 검증 루프
         for (const row of rows) {
             const studentId = String(row[mapping.studentId] || '').trim();
             const name = String(row[mapping.name] || '').trim();
@@ -1493,40 +1628,58 @@
 
             if (!studentId || !phoneLast4) continue;
 
-            const hashKey = await sha256(`${studentId}:${phoneLast4}`);
+            const hashKey = await sha256(`${studentId}|${phoneLast4}`);
+            const studentIdHash = await sha256(studentId);
 
             const nameMasked = name.length <= 1 ? name : name[0] + '*'.repeat(name.length - 1);
             const idMasked = studentId.length > 4
                 ? studentId.slice(0, 4) + '****'
                 : studentId;
 
-            // 평가 점수 수집 (쌍 기반 — 인덱스 어긋남 없음)
+            // 평가 점수 수집 및 스케일링 적용
             const scores = {};
             evalPairs.forEach(({ evalItem, colName }) => {
                 if (colName) {
-                    const val = row[colName];
-                    scores[`${evalItem.id}_score`] = val === '' || val === null || val === undefined
-                        ? null
-                        : parseFloat(val);
+                    const rawVal = parseFloat(row[colName]);
+                    if (rawVal === '' || rawVal === null || rawVal === undefined || isNaN(rawVal)) {
+                        scores[`${evalItem.id}_score`] = null;
+                    } else {
+                        // 스케일링 적용(비율에 맞춤) 혹은 원본값 그대로 저장
+                        scores[`${evalItem.id}_score`] = useWeightedScaling
+                            ? parseFloat((rawVal * (evalItem.ratio / 100)).toFixed(2))
+                            : rawVal;
+                    }
                 } else {
                     scores[`${evalItem.id}_score`] = null;
                 }
             });
 
-            // 총점 자동 계산 (없으면 평가항목 합산 + 특별점수)
-            let calcTotal = totalScore;
-            if (!mapping.total || totalScore === 0) {
-                calcTotal = Object.values(scores).reduce((sum, v) => sum + (v || 0), 0) + specialScore;
+            // 계산 총점 = 평가항목 가중합산 + 특별점수
+            const calculatedSum = Object.values(scores).reduce((sum, v) => sum + (v || 0), 0) + specialScore;
+            const finalCalculatedTotal = parseFloat(calculatedSum.toFixed(2));
+
+            // 총점 불일치 검증
+            if (mapping.total && totalScore !== 0) {
+                if (Math.abs(finalCalculatedTotal - totalScore) > 0.5) {
+                    totalMismatches++;
+                    mismatchDetails.push({
+                        studentId: idMasked,
+                        name: nameMasked,
+                        excelTotal: totalScore,
+                        calcTotal: finalCalculatedTotal
+                    });
+                }
             }
 
             const entry = {
+                student_id_hash: studentIdHash,
                 department: dept,
                 class_num: classNum,
                 student_id_masked: idMasked,
                 name_masked: nameMasked,
                 ...scores,
                 special_score: specialScore || null,
-                total_score: calcTotal,
+                total_score: finalCalculatedTotal,
                 rank: rank || `- / -`,
                 grade: grade || '',
                 absences: absences,
@@ -1565,10 +1718,16 @@
         }
 
         return {
+            evaluation: adminConfig.evaluation,
             students,
             class_avg: classAvg,
             class_max: classMax,
             class_counts: classCounts,
+            verificationReport: {
+                useWeightedScaling,
+                totalMismatches,
+                mismatchDetails
+            }
         };
     }
 
@@ -1680,9 +1839,1373 @@
         setupUpload();
     }
 
+    // ── 마스터/교수 회원 DB 초기화 ──
+    async function initUsersDB() {
+        // 기존 가입 정보를 1회만 강제 초기화하여 마스터 계정만 남김
+        const resetKey = 'scorequery_reset_20260617_v2';
+        if (!localStorage.getItem(resetKey)) {
+            localStorage.removeItem('scorequery_users');
+            sessionStorage.removeItem('scorequery_session');
+            localStorage.setItem(resetKey, 'true');
+        }
+
+        let users = localStorage.getItem('scorequery_users');
+        if (!users) {
+            // 마스터 계정 기본 탑재 (armour@tu.ac.kr / armour1234)
+            const masterPwHashed = await sha256('armour1234');
+            const defaultUsers = [
+                {
+                    name: '아모르',
+                    univ: '동명대학교',
+                    dept: '경영학과',
+                    email: 'armour@tu.ac.kr',
+                    pw: masterPwHashed,
+                    phone: '010-9756-5400',
+                    status: 'approved',
+                    isMaster: true,
+                    regDate: new Date().toISOString()
+                }
+            ];
+            localStorage.setItem('scorequery_users', JSON.stringify(defaultUsers));
+        }
+    }
+
+    // ── 인증 세션 처리 초기화 ──
+    async function initAuth() {
+        await initUsersDB();
+
+        const loginForm = document.getElementById('admin-login-form');
+        if (loginForm) loginForm.addEventListener('submit', handleProfLogin);
+
+        const registerForm = document.getElementById('admin-register-form');
+        if (registerForm) registerForm.addEventListener('submit', handleProfRegister);
+
+        const regPw = document.getElementById('reg-pw');
+        if (regPw) regPw.addEventListener('input', handlePasswordStrength);
+
+        const regLink = document.getElementById('go-to-register');
+        if (regLink) regLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('admin-login-card').style.display = 'none';
+            document.getElementById('admin-register-card').style.display = '';
+        });
+
+        const loginLink = document.getElementById('go-to-login');
+        if (loginLink) loginLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('admin-login-card').style.display = '';
+            document.getElementById('admin-register-card').style.display = 'none';
+        });
+
+        const authBack = document.getElementById('auth-back-home');
+        if (authBack) authBack.addEventListener('click', showModeSelection);
+
+        const pendingBack = document.getElementById('pending-back-login');
+        if (pendingBack) pendingBack.addEventListener('click', () => {
+            currentUser = null;
+            document.getElementById('admin-login-form').reset();
+            document.getElementById('admin-auth-panel').style.display = '';
+            document.getElementById('admin-pending-panel').style.display = 'none';
+        });
+
+        const masterLogout = document.getElementById('master-logout-btn');
+        if (masterLogout) masterLogout.addEventListener('click', handleLogoutAction);
+
+        const masterChangePw = document.getElementById('master-change-pw-btn');
+        if (masterChangePw) masterChangePw.addEventListener('click', showChangePasswordModal);
+
+        const masterBack = document.getElementById('master-back-home');
+        if (masterBack) masterBack.addEventListener('click', showModeSelection);
+
+        const adminLogout = document.getElementById('admin-logout-btn');
+        if (adminLogout) adminLogout.addEventListener('click', handleLogoutAction);
+
+        const adminChangePw = document.getElementById('admin-change-pw-btn');
+        if (adminChangePw) adminChangePw.addEventListener('click', showChangePasswordModal);
+
+        const adminDeleteAccount = document.getElementById('admin-delete-account-btn');
+        if (adminDeleteAccount) adminDeleteAccount.addEventListener('click', handleSelfDelete);
+
+        try {
+            const sess = sessionStorage.getItem('scorequery_session');
+            if (sess) {
+                const user = JSON.parse(sess);
+                currentUser = user;
+                if (user.isMaster) {
+                    showMasterDashboard();
+                } else if (user.status === 'approved') {
+                    document.getElementById('prof-name').value = user.name;
+                    document.getElementById('prof-email').value = user.email;
+                    document.getElementById('prof-phone').value = user.phone;
+                    adminConfig.professor = { name: user.name, email: user.email, phone: user.phone };
+                    enterAdminWizard();
+                } else if (user.status === 'pending') {
+                    showPendingView(user);
+                }
+            }
+        } catch (e) {
+            console.error('Session load error:', e);
+        }
+    }
+
+    async function handleProfLogin(e) {
+        e.preventDefault();
+        const email = document.getElementById('admin-login-email').value.trim();
+        const pw = document.getElementById('admin-login-pw').value.trim();
+        const errorEl = document.getElementById('admin-login-error');
+        errorEl.style.display = 'none';
+
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        
+        // 입력 패스워드 SHA-256 해시화 대조
+        const pwHashed = await sha256(pw);
+        const user = users.find(u => u.email === email && u.pw === pwHashed);
+
+        if (!user) {
+            errorEl.textContent = '❌ 이메일 또는 비밀번호가 올바르지 않습니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (user.isMaster) {
+            currentUser = user;
+            sessionStorage.setItem('scorequery_session', JSON.stringify(user));
+            showMasterDashboard();
+            return;
+        }
+
+        if (user.status === 'pending') {
+            currentUser = user;
+            showPendingView(user);
+            return;
+        }
+
+        if (user.status === 'rejected') {
+            errorEl.textContent = '❌ 가입 신청이 반려되었습니다. 마스터 교수님께 문의 바랍니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (user.status === 'deleted') {
+            errorEl.textContent = '❌ 탈퇴 또는 삭제 처리된 계정입니다. 마스터 교수님께 문의 바랍니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        currentUser = user;
+        sessionStorage.setItem('scorequery_session', JSON.stringify(user));
+
+        document.getElementById('prof-name').value = user.name;
+        document.getElementById('prof-email').value = user.email;
+        document.getElementById('prof-phone').value = user.phone;
+        adminConfig.professor = { name: user.name, email: user.email, phone: user.phone };
+
+        enterAdminWizard();
+    }
+
+    async function handleProfRegister(e) {
+        e.preventDefault();
+        const name = document.getElementById('reg-name').value.trim();
+        const univ = document.getElementById('reg-univ').value.trim();
+        const dept = document.getElementById('reg-dept').value.trim();
+        const email = document.getElementById('reg-email').value.trim();
+        const pw = document.getElementById('reg-pw').value.trim();
+        const pwConfirm = document.getElementById('reg-pw-confirm').value.trim();
+        const phone = document.getElementById('reg-phone').value.trim();
+        const errorEl = document.getElementById('admin-register-error');
+        errorEl.style.display = 'none';
+
+        // 비밀번호 강도 조건 체크: 대소문자, 숫자, 특수문자를 각각 최소 1개 포함하여 8자 이상
+        const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+        if (!pwRegex.test(pw)) {
+            errorEl.textContent = '❌ 비밀번호는 영문 대소문자, 숫자, 특수문자를 각각 최소 1개 이상 필수 포함하여 8자 이상으로 설정해 주세요.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        // 비밀번호 재확인 검증
+        if (pw !== pwConfirm) {
+            errorEl.textContent = '❌ 비밀번호와 비밀번호 재확인이 일치하지 않습니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const existingUserByEmail = users.find(u => u.email === email);
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        const existingUserByPhone = users.find(u => (u.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+
+        // 1. 이메일 중복 체크 (사용 중인 계정)
+        if (existingUserByEmail && existingUserByEmail.status !== 'deleted') {
+            errorEl.textContent = '❌ 이미 등록되었거나 가입 대기 중인 이메일입니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        // 2. 휴대전화 중복 체크 (사용 중인 계정)
+        if (existingUserByPhone && existingUserByPhone.status !== 'deleted') {
+            errorEl.textContent = '❌ 이미 등록되었거나 가입 대기 중인 휴대전화 번호입니다.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        // 비밀번호 해시화 암호화 보관
+        const pwHashed = await sha256(pw);
+
+        // 3. 기존에 탈퇴/삭제된 계정(deleted)이 있을 때 갱신 (재가입 처리)
+        if (existingUserByEmail && existingUserByEmail.status === 'deleted') {
+            existingUserByEmail.name = name;
+            existingUserByEmail.univ = univ;
+            existingUserByEmail.dept = dept;
+            existingUserByEmail.pw = pwHashed;
+            existingUserByEmail.phone = phone;
+            existingUserByEmail.status = 'pending';
+            existingUserByEmail.regDate = new Date().toISOString();
+            if (existingUserByEmail.deletedDate) {
+                delete existingUserByEmail.deletedDate;
+            }
+            
+            localStorage.setItem('scorequery_users', JSON.stringify(users));
+            currentUser = existingUserByEmail;
+            showPendingView(existingUserByEmail);
+            return;
+        }
+
+        // 4. 신규 회원가입 등록
+        const newUser = {
+            name, univ, dept, email,
+            pw: pwHashed,
+            phone,
+            status: 'pending',
+            isMaster: false,
+            regDate: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+
+        currentUser = newUser;
+        showPendingView(newUser);
+    }
+
+    function showPendingView(user) {
+        document.getElementById('admin-auth-panel').style.display = 'none';
+        document.getElementById('admin-pending-panel').style.display = '';
+        document.getElementById('admin-master-panel').style.display = 'none';
+        document.getElementById('admin-wizard-container').style.display = 'none';
+
+        const infoEl = document.getElementById('pending-details-info');
+        infoEl.innerHTML = `
+            <div class="pending-details-row"><span class="pending-details-label">이름:</span> <span class="pending-details-value">${user.name}</span></div>
+            <div class="pending-details-row"><span class="pending-details-label">소속 대학:</span> <span class="pending-details-value">${user.univ || '-'}</span></div>
+            <div class="pending-details-row"><span class="pending-details-label">소속 학과:</span> <span class="pending-details-value">${user.dept}</span></div>
+            <div class="pending-details-row"><span class="pending-details-label">이메일:</span> <span class="pending-details-value">${user.email}</span></div>
+            <div class="pending-details-row"><span class="pending-details-label">전화번호:</span> <span class="pending-details-value">${user.phone}</span></div>
+            <div class="pending-details-row"><span class="pending-details-label">신청일자:</span> <span class="pending-details-value">${new Date(user.regDate).toLocaleDateString()}</span></div>
+        `;
+
+        const mailBtn = document.getElementById('btn-request-approval');
+        mailBtn.onclick = () => sendApprovalRequestMail(user);
+    }
+
+    function sendApprovalRequestMail(user) {
+        const to = 'armour@tu.ac.kr';
+        const subjectText = `[ScoreQuery] 교수자 회원가입 승인 요청 - ${user.name} 교수`;
+        const bodyText = 
+            `아모르 마스터(서창갑 교수님) 귀하,\n\n` +
+            `아래 교수님의 ScoreQuery 성적조회시스템 회원가입 승인을 정중히 요청드립니다.\n\n` +
+            `[가입 신청 정보]\n` +
+            `- 신청자 성명: ${user.name}\n` +
+            `- 소속 대학교: ${user.univ || '-'}\n` +
+            `- 소속 학과: ${user.dept}\n` +
+            `- 이메일 주소: ${user.email}\n` +
+            `- 휴대전화 번호: ${user.phone}\n` +
+            `- 신청 일시: ${new Date(user.regDate).toLocaleString()}\n\n` +
+            `내용을 검토하신 후 아래 마스터 대시보드에 접속하여 가입 승인을 처리해 주시면 대단히 감사하겠습니다.\n\n` +
+            `- 마스터 대시보드 주소: https://armour-seo.github.io/ScoreQuery/`;
+
+        sendMail(to, subjectText, bodyText);
+    }
+
+    function showMasterDashboard() {
+        document.getElementById('admin-auth-panel').style.display = 'none';
+        document.getElementById('admin-pending-panel').style.display = 'none';
+        document.getElementById('admin-master-panel').style.display = '';
+        document.getElementById('admin-wizard-container').style.display = 'none';
+
+        // 마스터 대시보드 진입 시 레이아웃 확장
+        adminSection.classList.add('wide-layout');
+        if (mainContainer) {
+            mainContainer.classList.add('wide-layout');
+        }
+
+        // GAS URL 로드 및 바인딩
+        const gasInput = document.getElementById('gas-url-input');
+        const saveBtn = document.getElementById('save-gas-url-btn');
+        if (gasInput && saveBtn) {
+            gasInput.value = localStorage.getItem('scorequery_gas_url') || '';
+            saveBtn.onclick = () => {
+                const url = gasInput.value.trim();
+                localStorage.setItem('scorequery_gas_url', url);
+                alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
+            };
+        }
+
+        const gasHelpBtn = document.getElementById('gas-help-btn');
+        if (gasHelpBtn) {
+            gasHelpBtn.onclick = showGasGuideModal;
+        }
+
+        // 성적 조회 일정 로드 및 바인딩
+        const startInput = document.getElementById('schedule-start');
+        const endInput = document.getElementById('schedule-end');
+        const noticeInput = document.getElementById('schedule-notice');
+        const saveSchedBtn = document.getElementById('save-schedule-btn');
+
+        if (startInput && endInput && noticeInput && saveSchedBtn) {
+            const schedRaw = localStorage.getItem('scorequery_schedule');
+            if (schedRaw) {
+                try {
+                    const sched = JSON.parse(schedRaw);
+                    startInput.value = sched.start || '';
+                    endInput.value = sched.end || '';
+                    noticeInput.value = sched.notice || '';
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                startInput.value = '';
+                endInput.value = '';
+                noticeInput.value = '';
+            }
+
+            saveSchedBtn.onclick = () => {
+                const startVal = startInput.value;
+                const endVal = endInput.value;
+                const noticeVal = noticeInput.value.trim();
+
+                if (startVal && endVal && new Date(startVal) >= new Date(endVal)) {
+                    alert('❌ 시작 일시가 마감 일시보다 늦거나 같을 수 없습니다.');
+                    return;
+                }
+
+                if (!startVal && !endVal && !noticeVal) {
+                    localStorage.removeItem('scorequery_schedule');
+                    alert('ℹ️ 성적 조회 일정이 해제되었습니다. (상시 조회)');
+                } else {
+                    const sched = { start: startVal, end: endVal, notice: noticeVal };
+                    localStorage.setItem('scorequery_schedule', JSON.stringify(sched));
+                    alert('✅ 성적 조회 일정이 성공적으로 저장되었습니다.');
+                }
+            };
+        }
+
+        renderMasterPendingList();
+    }
+
+    function renderMasterPendingList() {
+        const pendingListEl = document.getElementById('master-pending-list');
+        const approvedListEl = document.getElementById('master-approved-list');
+        const deletedListEl = document.getElementById('master-deleted-list');
+
+        const pendingCountEl = document.getElementById('pending-count-badge');
+        const approvedCountEl = document.getElementById('approved-count-badge');
+        const deletedCountEl = document.getElementById('deleted-count-badge');
+
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const applicants = users.filter(u => !u.isMaster);
+
+        // 1. 가입신청 목록 (status === 'pending' || status === 'rejected')
+        const pendingUsers = applicants.filter(u => u.status === 'pending' || u.status === 'rejected');
+        // 2. 등록회원 목록 (status === 'approved')
+        const approvedUsers = applicants.filter(u => u.status === 'approved');
+        // 3. 탈퇴 및 삭제회원 목록 (status === 'deleted')
+        const deletedUsers = applicants.filter(u => u.status === 'deleted');
+
+        // 배지 카운트 업데이트
+        if (pendingCountEl) pendingCountEl.textContent = pendingUsers.length;
+        if (approvedCountEl) approvedCountEl.textContent = approvedUsers.length;
+        if (deletedCountEl) deletedCountEl.textContent = deletedUsers.length;
+
+        // ─── 1. 가입 신청 현황 렌더링 ───
+        if (pendingListEl) {
+            pendingListEl.innerHTML = '';
+            if (pendingUsers.length === 0) {
+                pendingListEl.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-secondary);">회원가입 신청 건이 존재하지 않습니다.</td></tr>';
+            } else {
+                pendingUsers.forEach((user, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
+                    
+                    let statusBadge = `<span class="status-badge pending">대기</span>`;
+                    if (user.status === 'rejected') statusBadge = `<span class="status-badge rejected">반려됨</span>`;
+
+                    const actionHtml = `
+                        <div class="master-actions">
+                            <button class="btn-approve" data-email="${user.email}">승인</button>
+                            ${user.status === 'pending' ? `<button class="btn-reject" data-email="${user.email}">반려</button>` : ''}
+                            <button class="btn-delete-user" data-email="${user.email}">삭제</button>
+                        </div>
+                    `;
+
+                    tr.innerHTML = `
+                        <td style="padding:12px; text-align:center; color:var(--text-secondary);">${idx + 1}</td>
+                        <td style="padding:12px;">${user.name}</td>
+                        <td style="padding:12px;">${user.univ || '-'}</td>
+                        <td style="padding:12px;">${user.dept}</td>
+                        <td style="padding:12px;">${user.email}</td>
+                        <td style="padding:12px;">${user.phone}</td>
+                        <td style="padding:12px;">${new Date(user.regDate).toLocaleDateString()}</td>
+                        <td style="padding:12px; text-align:center;">${statusBadge}</td>
+                        <td style="padding:12px; text-align:center;">${actionHtml}</td>
+                    `;
+                    pendingListEl.appendChild(tr);
+                });
+            }
+        }
+
+        // ─── 2. 등록 회원 관리 렌더링 ───
+        if (approvedListEl) {
+            approvedListEl.innerHTML = '';
+            if (approvedUsers.length === 0) {
+                approvedListEl.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-secondary);">등록된 회원이 존재하지 않습니다.</td></tr>';
+            } else {
+                approvedUsers.forEach((user, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
+
+                    const statusBadge = `<span class="status-badge approved">승인됨</span>`;
+                    const actionHtml = `
+                        <div class="master-actions">
+                            <button class="btn-reset-pw" data-email="${user.email}">비밀번호 리셋</button>
+                            <button class="btn-reject-approved" data-email="${user.email}" style="background:linear-gradient(135deg, #f59e0b, #d97706); border:none; color:white; padding:6px 12px; border-radius:var(--radius-sm); font-size:12px; cursor:pointer;">반려</button>
+                            <button class="btn-delete-user" data-email="${user.email}">삭제</button>
+                        </div>
+                    `;
+
+                    tr.innerHTML = `
+                        <td style="padding:12px; text-align:center; color:var(--text-secondary);">${idx + 1}</td>
+                        <td style="padding:12px;">${user.name}</td>
+                        <td style="padding:12px;">${user.univ || '-'}</td>
+                        <td style="padding:12px;">${user.dept}</td>
+                        <td style="padding:12px;">${user.email}</td>
+                        <td style="padding:12px;">${user.phone}</td>
+                        <td style="padding:12px;">${new Date(user.regDate).toLocaleDateString()}</td>
+                        <td style="padding:12px; text-align:center;">${statusBadge}</td>
+                        <td style="padding:12px; text-align:center;">${actionHtml}</td>
+                    `;
+                    approvedListEl.appendChild(tr);
+                });
+            }
+        }
+
+        // ─── 3. 탈퇴 및 삭제 회원 이력 렌더링 ───
+        if (deletedListEl) {
+            deletedListEl.innerHTML = '';
+            if (deletedUsers.length === 0) {
+                deletedListEl.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-secondary);">탈퇴 및 삭제 회원 이력이 존재하지 않습니다.</td></tr>';
+            } else {
+                deletedUsers.forEach((user, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
+
+                    const statusBadge = `<span class="status-badge deleted">삭제됨</span>`;
+                    const actionHtml = `
+                        <div class="master-actions">
+                            <button class="btn-restore" data-email="${user.email}" style="background:linear-gradient(135deg, #6366f1, #4f46e5); border:none; color:white; padding:6px 12px; border-radius:var(--radius-sm); font-size:12px; cursor:pointer;">복구</button>
+                        </div>
+                    `;
+
+                    const deletedDateStr = user.deletedDate ? new Date(user.deletedDate).toLocaleDateString() : '-';
+
+                    tr.innerHTML = `
+                        <td style="padding:12px; text-align:center; color:var(--text-secondary);">${idx + 1}</td>
+                        <td style="padding:12px;">${user.name}</td>
+                        <td style="padding:12px;">${user.univ || '-'}</td>
+                        <td style="padding:12px;">${user.dept}</td>
+                        <td style="padding:12px;">${user.email}</td>
+                        <td style="padding:12px;">${user.phone}</td>
+                        <td style="padding:12px;">${deletedDateStr}</td>
+                        <td style="padding:12px; text-align:center;">${statusBadge}</td>
+                        <td style="padding:12px; text-align:center;">${actionHtml}</td>
+                    `;
+                    deletedListEl.appendChild(tr);
+                });
+            }
+        }
+
+        // ─── 이벤트 바인딩 ───
+        document.querySelectorAll('.btn-approve').forEach(btn => {
+            btn.onclick = () => handleApprove(btn.dataset.email);
+        });
+        document.querySelectorAll('.btn-reject').forEach(btn => {
+            btn.onclick = () => handleReject(btn.dataset.email);
+        });
+        document.querySelectorAll('.btn-reject-approved').forEach(btn => {
+            btn.onclick = () => handleRejectApproved(btn.dataset.email);
+        });
+        document.querySelectorAll('.btn-reset-pw').forEach(btn => {
+            btn.onclick = () => handleResetPassword(btn.dataset.email);
+        });
+        document.querySelectorAll('.btn-delete-user').forEach(btn => {
+            btn.onclick = () => handleDeleteUserByMaster(btn.dataset.email);
+        });
+        document.querySelectorAll('.btn-restore').forEach(btn => {
+            btn.onclick = () => handleRestoreUserByMaster(btn.dataset.email);
+        });
+    }
+
+    function handleApprove(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        users[idx].status = 'approved';
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+
+        const targetUser = users[idx];
+        renderMasterPendingList();
+
+        const to = targetUser.email;
+        const subjectText = '[ScoreQuery] 교수 회원가입 승인 완료 안내';
+        const bodyText = 
+            `${targetUser.name} 교수님 안녕하십니까,\n\n` +
+            `성적 조회 및 관리 시스템(ScoreQuery)의 교수 회원가입 신청이 성공적으로 승인 완료되었음을 알려드립니다.\n\n` +
+            `이제 아래의 시스템 주소로 접속하신 뒤, 등록하신 교수 이메일(${targetUser.email})과 설정하신 비밀번호로 로그인하여 시스템에 진입하실 수 있습니다.\n\n` +
+            `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
+            `감사합니다.\n` +
+            `마스터 서창갑(아모르) 드림\n`;
+
+        sendMail(to, subjectText, bodyText);
+    }
+
+    async function handleResetPassword(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        const targetUser = users[idx];
+        if (!confirm(`⚠️ ${targetUser.name} 교수님의 비밀번호를 초기화하시겠습니까?`)) return;
+
+        // 임시 비밀번호 생성: 이메일 ID + 랜덤 숫자 6자리
+        const emailId = email.split('@')[0];
+        const randNum = Math.floor(100000 + Math.random() * 900000);
+        const tempPw = emailId + randNum;
+
+        // 비밀번호 해시화 저장
+        const pwHashed = await sha256(tempPw);
+        users[idx].pw = pwHashed;
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+
+        // 메일 클라이언트 및 모달 발송 연동
+        const to = targetUser.email;
+        const subjectText = '[ScoreQuery] 교수자 계정 비밀번호 초기화 안내';
+        const bodyText = 
+            `${targetUser.name} 교수님 안녕하십니까,\n\n` +
+            `요청하신 ScoreQuery 교수자 계정의 비밀번호가 임시 비밀번호로 초기화되었습니다.\n\n` +
+            `- 이메일 ID: ${targetUser.email}\n` +
+            `- 임시 비밀번호: ${tempPw}\n\n` +
+            `아래의 시스템 주소로 접속하신 후, 임시 비밀번호로 로그인하여 안전한 비밀번호로 변경하여 사용해 주시기 바랍니다.\n\n` +
+            `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
+            `감사합니다.\n` +
+            `마스터 아모르 드림\n`;
+
+        sendMail(to, subjectText, bodyText);
+    }
+
+    function handleReject(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        if (!confirm('정말 본 신청을 반려 처리하시겠습니까?')) return;
+
+        users[idx].status = 'rejected';
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+        renderMasterPendingList();
+    }
+
+    function handleRejectApproved(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        if (!confirm('⚠️ 정말 본 회원의 가입 승인을 취소하고 반려 상태로 전환하시겠습니까?\n이 회원은 로그인 권한을 즉시 상실하게 됩니다.')) return;
+
+        users[idx].status = 'rejected';
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+        renderMasterPendingList();
+    }
+
+    function handleDeleteUserByMaster(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        const targetUser = users[idx];
+        if (!confirm(`⚠️ 정말로 ${targetUser.name} 교수님의 계정을 삭제하시겠습니까?\n계정 정보는 삭제 이력 로그(Soft Delete)에 영구 보존됩니다.`)) return;
+
+        users[idx].status = 'deleted';
+        users[idx].deletedDate = new Date().toISOString();
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+        renderMasterPendingList();
+        alert(`🗑️ ${targetUser.name} 교수님의 계정이 성공적으로 삭제 처리되어 이력 로그에 기록되었습니다.`);
+    }
+
+    function handleRestoreUserByMaster(email) {
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === email);
+        if (idx < 0) return;
+
+        const targetUser = users[idx];
+        if (!confirm(`ℹ️ ${targetUser.name} 교수님의 삭제된 계정을 가입 신청(대기) 상태로 복구하시겠습니까?`)) return;
+
+        users[idx].status = 'pending';
+        if (users[idx].deletedDate) {
+            delete users[idx].deletedDate;
+        }
+        localStorage.setItem('scorequery_users', JSON.stringify(users));
+        renderMasterPendingList();
+        alert(`✨ ${targetUser.name} 교수님의 계정이 가입 대기 상태로 복구되었습니다.`);
+    }
+
+    function handleSelfDelete() {
+        if (!currentUser) return;
+        if (currentUser.isMaster) {
+            alert('⚠️ 마스터 계정은 탈퇴할 수 없습니다.');
+            return;
+        }
+
+        if (!confirm('⚠️ 정말로 회원 탈퇴를 진행하시겠습니까?\n회원 정보는 삭제 이력 로그(Soft Delete)로 보존되며, 마스터 복구 전까지 로그인이 불가능합니다.')) {
+            return;
+        }
+
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const idx = users.findIndex(u => u.email === currentUser.email);
+        if (idx >= 0) {
+            users[idx].status = 'deleted';
+            users[idx].deletedDate = new Date().toISOString();
+            localStorage.setItem('scorequery_users', JSON.stringify(users));
+        }
+
+        alert('🗑️ 회원 탈퇴 처리가 완료되었습니다. 처음 화면으로 돌아갑니다.');
+        handleLogoutAction();
+    }
+
+    function handleLogoutAction() {
+        currentUser = null;
+        sessionStorage.removeItem('scorequery_session');
+        
+        const loginForm = document.getElementById('admin-login-form');
+        if (loginForm) loginForm.reset();
+        
+        const regForm = document.getElementById('admin-register-form');
+        if (regForm) regForm.reset();
+        
+        document.getElementById('admin-auth-panel').style.display = '';
+        document.getElementById('admin-login-card').style.display = '';
+        document.getElementById('admin-register-card').style.display = 'none';
+        
+        document.getElementById('admin-pending-panel').style.display = 'none';
+        document.getElementById('admin-master-panel').style.display = 'none';
+        document.getElementById('admin-wizard-container').style.display = 'none';
+
+        // 로그아웃 시 레이아웃 복원
+        adminSection.classList.remove('wide-layout');
+        if (mainContainer) {
+            mainContainer.classList.remove('wide-layout');
+        }
+
+        currentStep = 1;
+        topBarTitle.textContent = '📊 성적 관리 시스템';
+    }
+
+    function enterAdminWizard() {
+        document.getElementById('admin-auth-panel').style.display = 'none';
+        document.getElementById('admin-pending-panel').style.display = 'none';
+        document.getElementById('admin-master-panel').style.display = 'none';
+        document.getElementById('admin-wizard-container').style.display = '';
+
+        // 교수 마법사 진입 시 레이아웃 복원
+        adminSection.classList.remove('wide-layout');
+        if (mainContainer) {
+            mainContainer.classList.remove('wide-layout');
+        }
+
+        const deleteBtn = document.getElementById('admin-delete-account-btn');
+        if (deleteBtn) {
+            deleteBtn.style.display = currentUser && currentUser.isMaster ? 'none' : '';
+        }
+
+        goToStep(1);
+    }
+
+    // ── 메일 클라이언트 미작동 시 폴백용 모달 ──
+    function showMailModal(to, subjectDecoded, bodyDecoded) {
+        const existing = document.getElementById('mail-fallback-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="mail-fallback-modal" style="
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.75);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 99999;
+                font-family: inherit;
+            ">
+                <div style="
+                    background: rgba(30, 41, 59, 0.95);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 16px;
+                    width: 90%;
+                    max-width: 500px;
+                    padding: 24px;
+                    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+                    color: #f8fafc;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                        <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #38bdf8;">📬 메일 발송 안내 (Mail Sandbox)</h3>
+                        <button id="close-mail-modal-btn" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
+                    </div>
+                    
+                    <!-- 수동 발송 경고 배너 -->
+                    <div style="
+                        background: rgba(249, 115, 22, 0.1);
+                        border: 1px solid rgba(249, 115, 22, 0.3);
+                        border-radius: 8px;
+                        padding: 10px 12px;
+                        margin-bottom: 16px;
+                        font-size: 0.75rem;
+                        color: #fdba74;
+                        line-height: 1.4;
+                        text-align: left;
+                    ">
+                        ⚠️ <strong>수동 메일(mailto) 경고:</strong> 수동 발송 방식은 아웃룩 등 사용자 로컬 이메일 프로그램 환경에 따라 발송이 누락될 수 있으므로, 안정적인 '자동 메일 발송' 연결을 강력히 권장합니다.
+                    </div>
+
+                    <p style="font-size: 0.875rem; color: #cbd5e1; margin-bottom: 16px; line-height: 1.5; margin-top: 0;">
+                        기본 메일 프로그램(Outlook, Windows Mail 등)이 자동으로 실행되지 않는 경우, 아래 내용을 복사하여 사용하시는 포털/학교 웹메일에서 직접 발송해 주세요.
+                    </p>
+
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; font-weight: 600;">수신인 (To)</label>
+                        <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.9rem; word-break: break-all;">${to}</div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; font-weight: 600;">메일 제목 (Subject)</label>
+                        <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.9rem; font-weight: 500;">${subjectDecoded}</div>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; font-weight: 600;">메일 본문 (Body)</label>
+                        <pre style="
+                            background: rgba(15, 23, 42, 0.6);
+                            padding: 12px;
+                            border-radius: 6px;
+                            border: 1px solid rgba(255,255,255,0.05);
+                            font-size: 0.85rem;
+                            font-family: inherit;
+                            white-space: pre-wrap;
+                            word-break: break-all;
+                            max-height: 150px;
+                            overflow-y: auto;
+                            margin: 0;
+                            line-height: 1.5;
+                        ">${bodyDecoded}</pre>
+                    </div>
+
+                    <div style="display: flex; gap: 8px;">
+                        <button id="copy-mail-info-btn" style="
+                            flex: 1;
+                            background: #0ea5e9;
+                            color: white;
+                            border: none;
+                            padding: 10px;
+                            border-radius: 6px;
+                            font-size: 0.875rem;
+                            font-weight: 500;
+                            cursor: pointer;
+                            transition: background 0.2s;
+                        ">📋 메일 정보 복사하기</button>
+                        <button id="open-mail-client-btn" style="
+                            flex: 1;
+                            background: rgba(255, 255, 255, 0.1);
+                            color: white;
+                            border: 1px solid rgba(255,255,255,0.2);
+                            padding: 10px;
+                            border-radius: 6px;
+                            font-size: 0.875rem;
+                            font-weight: 500;
+                            cursor: pointer;
+                            transition: background 0.2s;
+                        ">✉️ 메일 앱 열기</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const modal = document.getElementById('mail-fallback-modal');
+        const closeBtn = document.getElementById('close-mail-modal-btn');
+        const copyBtn = document.getElementById('copy-mail-info-btn');
+        const openBtn = document.getElementById('open-mail-client-btn');
+
+        closeBtn.onclick = () => modal.remove();
+        
+        openBtn.onclick = () => {
+            const subject = encodeURIComponent(subjectDecoded);
+            const body = encodeURIComponent(bodyDecoded);
+            window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+        };
+
+        copyBtn.onclick = () => {
+            const fullText = `To: ${to}\nSubject: ${subjectDecoded}\n\n${bodyDecoded}`;
+            navigator.clipboard.writeText(fullText).then(() => {
+                copyBtn.textContent = '✅ 복사 완료!';
+                copyBtn.style.background = '#10b981';
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 메일 정보 복사하기';
+                    copyBtn.style.background = '#0ea5e9';
+                }, 2000);
+            }).catch(err => {
+                alert('복사에 실패했습니다. 내용을 직접 드래그하여 복사해 주세요.');
+            });
+        };
+    }
+
+    // ── 구글 앱스 스크립트 기반 메일 발송 처리 ──
+    function sendMail(to, subjectText, bodyText) {
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            showMailLoading(true);
+            
+            fetch(gasUrl, {
+                method: 'POST',
+                mode: 'no-cors', // CORS 우회용 no-cors 모드 (GAS 웹앱 트리거에 최적)
+                headers: {
+                    'Content-Type': 'text/plain'
+                },
+                body: JSON.stringify({ to, subject: subjectText, body: bodyText })
+            }).then(() => {
+                showMailLoading(false);
+                alert(`✉️ 자동 메일 발송 요청을 전송했습니다.\n(수신인: ${to})`);
+            }).catch(err => {
+                showMailLoading(false);
+                console.error('[ScoreQuery] GAS Send Mail Error:', err);
+                alert('⚠️ 자동 메일 발송 중 오류가 발생했습니다. 수동 발송 창을 띄웁니다.');
+                showMailModal(to, subjectText, bodyText);
+            });
+        } else {
+            // 구글 앱스 스크립트 설정이 없으면 기존 메일 클라이언트 및 모달 폴백
+            window.location.href = `mailto:${to}?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
+            showMailModal(to, subjectText, bodyText);
+        }
+    }
+
+    // ── 자동 메일 발송 중 오버레이 ──
+    function showMailLoading(show) {
+        const id = 'mail-loading-overlay';
+        let overlay = document.getElementById(id);
+        if (show) {
+            if (!overlay) {
+                const html = `
+                    <div id="${id}" style="
+                        position: fixed;
+                        top: 0; left: 0; width: 100%; height: 100%;
+                        background: rgba(15, 23, 42, 0.8);
+                        backdrop-filter: blur(4px);
+                        display: flex; flex-direction: column; align-items: center; justify-content: center;
+                        z-index: 100000;
+                        color: #f8fafc;
+                        font-family: inherit;
+                    ">
+                        <div style="
+                            border: 4px solid rgba(255,255,255,0.1);
+                            border-left-color: #38bdf8;
+                            border-radius: 50%;
+                            width: 40px; height: 40px;
+                            animation: spin 1s linear infinite;
+                            margin-bottom: 16px;
+                        "></div>
+                        <div style="font-size: 13px; font-weight: 500;">✉️ 구글 앱스 스크립트로 자동 메일 발송 중...</div>
+                        <style>
+                            @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                        </style>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', html);
+            }
+        } else {
+            if (overlay) overlay.remove();
+        }
+    }
+
+    // ── 비밀번호 변경 모달 대화상자 ──
+    function showChangePasswordModal() {
+        const modalId = 'change-password-modal';
+        const existing = document.getElementById(modalId);
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="${modalId}" style="
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.75);
+                backdrop-filter: blur(8px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 99999;
+                font-family: inherit;
+            ">
+                <div style="
+                    background: rgba(30, 41, 59, 0.95);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 16px;
+                    width: 90%;
+                    max-width: 400px;
+                    padding: 24px;
+                    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+                    color: #f8fafc;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                        <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #f59e0b;">🔒 비밀번호 변경</h3>
+                        <button id="close-pw-modal-btn" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
+                    </div>
+
+                    <div style="margin-bottom: 14px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">현재 비밀번호</label>
+                        <input type="password" id="change-pw-current" placeholder="현재 비밀번호 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                    </div>
+
+                    <div style="margin-bottom: 14px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호</label>
+                        <input type="password" id="change-pw-new" placeholder="대소문자/숫자/특수문자 포함 8자 이상" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호 확인</label>
+                        <input type="password" id="change-pw-confirm" placeholder="새 비밀번호 재확인 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                    </div>
+
+                    <div id="change-pw-error" style="display: none; color: #f87171; font-size: 12px; margin-bottom: 16px; line-height: 1.4;"></div>
+
+                    <button id="save-pw-change-btn" style="
+                        width: 100%;
+                        background: linear-gradient(135deg, #f59e0b, #d97706);
+                        color: white;
+                        border: none;
+                        padding: 10px;
+                        border-radius: 6px;
+                        font-size: 0.875rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: opacity 0.2s;
+                    ">변경사항 저장</button>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const modal = document.getElementById(modalId);
+        const closeBtn = document.getElementById('close-pw-modal-btn');
+        const saveBtn = document.getElementById('save-pw-change-btn');
+        const errEl = document.getElementById('change-pw-error');
+
+        closeBtn.onclick = () => modal.remove();
+
+        saveBtn.onclick = async () => {
+            errEl.style.display = 'none';
+
+            const currentVal = document.getElementById('change-pw-current').value;
+            const newVal = document.getElementById('change-pw-new').value;
+            const confirmVal = document.getElementById('change-pw-confirm').value;
+
+            if (!currentVal || !newVal || !confirmVal) {
+                errEl.textContent = '❌ 모든 항목을 입력해 주세요.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            if (!currentUser) {
+                errEl.textContent = '❌ 현재 로그인 세션 정보가 없습니다. 다시 로그인해 주세요.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            // 현재 비밀번호 검증
+            const currentHashed = await sha256(currentVal);
+            if (currentUser.pw !== currentHashed) {
+                errEl.textContent = '❌ 현재 비밀번호가 일치하지 않습니다.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            // 새 비밀번호 조건 검증 (대소문자, 숫자, 특수문자 8자 이상)
+            const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+            if (!pwRegex.test(newVal)) {
+                errEl.textContent = '❌ 새 비밀번호는 영문 대소문자, 숫자, 특수문자를 각각 최소 1개 이상 포함하여 8자 이상이어야 합니다.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            // 비밀번호 일치 검증
+            if (newVal !== confirmVal) {
+                errEl.textContent = '❌ 새 비밀번호와 새 비밀번호 확인이 일치하지 않습니다.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            // 새 비밀번호 해시화 및 DB 업데이트
+            const newHashed = await sha256(newVal);
+            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+            const idx = users.findIndex(u => u.email === currentUser.email);
+            if (idx >= 0) {
+                users[idx].pw = newHashed;
+                localStorage.setItem('scorequery_users', JSON.stringify(users));
+                
+                // 세션 정보 갱신
+                currentUser.pw = newHashed;
+                sessionStorage.setItem('scorequery_session', JSON.stringify(currentUser));
+                
+                alert('🔑 비밀번호가 성공적으로 변경되었습니다.');
+                modal.remove();
+            } else {
+                alert('⚠️ 비밀번호 변경 중 오류가 발생했습니다. 다시 로그인해 주세요.');
+                handleLogoutAction();
+            }
+        };
+    }
+
+    // ── Google Apps Script 자동 메일 발송 설정 가이드 팝업 모달 ──
+    function showGasGuideModal() {
+        const modalId = 'gas-guide-modal';
+        const existing = document.getElementById(modalId);
+        if (existing) existing.remove();
+
+        const gasCode = `function doPost(e) {
+  try {
+    var params = JSON.parse(e.postData.contents);
+    var to = params.to;
+    var subject = params.subject;
+    var body = params.body;
+    
+    // GmailApp을 활용하여 마스터 계정의 Gmail 권한으로 메일을 자동 발송합니다.
+    GmailApp.sendEmail(to, subject, body);
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+        const modalHtml = `
+            <div id="${modalId}" style="
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.85);
+                backdrop-filter: blur(10px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 99999;
+                font-family: inherit;
+            ">
+                <div style="
+                    background: rgba(30, 41, 59, 0.98);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 20px;
+                    width: 90%;
+                    max-width: 680px;
+                    padding: 28px;
+                    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+                    color: white;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    max-height: 90vh;
+                ">
+                    <!-- 헤더 -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 14px;">
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                            <span>⚙️ Google Apps Script 자동 메일 발송 설정 가이드</span>
+                        </h3>
+                        <span id="close-guide-btn" style="cursor: pointer; font-size: 20px; color: var(--text-secondary); transition: color 0.2s;">&times;</span>
+                    </div>
+
+                    <!-- 바디 (스크롤 지원) -->
+                    <div style="overflow-y: auto; flex: 1; padding-right: 8px; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 16px;">
+                        <p style="margin: 0; color: var(--text-secondary); font-size: 12.5px;">
+                            이 가이드는 마스터 승인/반려/비밀번호 초기화 처리 시, 이메일 프로그램(Outlook 등)을 수동으로 켜지 않고 브라우저 백그라운드에서 <strong>메일을 자동으로 즉시 발송</strong>되게 만드는 구글 스크립트 웹 앱 세팅 절차입니다. 
+                        </p>
+
+                        <!-- Step 1 -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; color: #f59e0b; margin-bottom: 8px;">1. 구글 앱스 스크립트 콘솔 접속</div>
+                            <div style="color: var(--text-primary);">
+                                • <a href="https://script.google.com/" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">Google Apps Script 콘솔 (https://script.google.com/)</a>에 접속하여 로그인합니다.<br>
+                                • 왼쪽 상단의 <strong>[새 프로젝트]</strong> (New Project) 버튼을 클릭하여 스크립트 에디터 창을 엽니다.
+                            </div>
+                        </div>
+
+                        <!-- Step 2 -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; color: #f59e0b; margin-bottom: 8px;">2. 스크립트 코드 작성 및 저장</div>
+                            <div style="color: var(--text-primary); margin-bottom: 10px;">
+                                • 기존 에디터에 자동으로 적혀 있는 기본 코드(function myFunction... )를 **전부 삭제**합니다.<br>
+                                • 아래의 통합 API 코드를 복사하여 에디터에 붙여넣습니다:
+                            </div>
+                            
+                            <!-- 코드 박스 -->
+                            <div style="position: relative;">
+                                <button id="btn-copy-gas" style="
+                                    position: absolute; right: 8px; top: 8px;
+                                    background: rgba(56, 189, 248, 0.15);
+                                    border: 1px solid rgba(56, 189, 248, 0.4);
+                                    color: #38bdf8; padding: 4px 10px; border-radius: 4px;
+                                    font-size: 11px; font-weight: 600; cursor: pointer;
+                                    transition: all 0.2s;
+                                ">코드 복사</button>
+                                <pre style="
+                                    margin: 0;
+                                    background: rgba(15, 23, 42, 0.8);
+                                    border: 1px solid rgba(255, 255, 255, 0.08);
+                                    padding: 14px; border-radius: 8px;
+                                    font-family: monospace; font-size: 11px; color: #a5b4fc;
+                                    overflow-x: auto; line-height: 1.5; max-height: 160px;
+                                ">${gasCode}</pre>
+                            </div>
+                            
+                            <div style="color: var(--text-primary); margin-top: 10px;">
+                                • 에디터 상단의 <strong>[저장]</strong> 아이콘(디스켓 모양)을 클릭하거나 \`Ctrl + S\`를 눌러 저장합니다. (프로젝트명은 예: <i>ScoreQueryMailer</i> 로 자유롭게 작성)
+                            </div>
+                        </div>
+
+                        <!-- Step 3 -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; color: #f59e0b; margin-bottom: 8px;">3. 웹 앱(Web App)으로 배포 (★핵심 설정)</div>
+                            <div style="color: var(--text-primary);">
+                                • 우측 상단의 파란색 <strong>[배포] -> [새 배포]</strong> (Deploy -> New Deployment)를 클릭합니다.<br>
+                                • 유형 선택(톱니바퀴 아이콘)을 누르고 <strong>[웹 앱]</strong> (Web App)을 선택합니다.<br>
+                                • 옵션 설정 값을 아래 내용과 **정확하게 동일하게 지정**해야 합니다 (틀릴 시 작동 불가):
+                                <div style="background: rgba(15, 23, 42, 0.4); border-left: 3px solid #0ea5e9; padding: 10px 14px; margin: 10px 0; border-radius: 4px; font-size: 12px; line-height: 1.7;">
+                                    1. <strong>설명</strong>: <span style="color: var(--text-secondary);">ScoreQuery Mail Service (자유 입력)</span><br>
+                                    2. <strong>웹 앱을 실행할 사용자</strong>: <strong style="color: #38bdf8;">나 (본인 이메일 계정)</strong><br>
+                                    3. <strong>액세스 권한이 있는 사용자</strong>: <strong style="color: #ef4444;">모든 사용자 (Anyone)</strong>
+                                </div>
+                                <span style="font-size: 11px; color: #fbbf24; display: block; margin-bottom: 8px;">⚠️ \'액세스 권한이 있는 사용자\'를 \'모든 사용자(Anyone)\'로 개방하지 않으면, ScoreQuery 대시보드 브라우저 환경에서 API 호출 시 권한 차단(CORS 정책 위반) 에러가 발생합니다.</span>
+                                • 하단의 <strong>[배포]</strong> (Deploy) 버튼을 클릭합니다.
+                            </div>
+                        </div>
+
+                        <!-- Step 4 -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; color: #f59e0b; margin-bottom: 8px;">4. 구글 보안 액세스 승인 (경고 대처법)</div>
+                            <div style="color: var(--text-primary);">
+                                • 배포 진행 중에 <strong>[액세스 권한 승인]</strong> (Authorize Access) 버튼 팝업이 나타나면 클릭 후 본인 구글 계정을 선택합니다.<br>
+                                • <i>\'Google에서 이 앱을 확인하지 않았습니다\'</i> (Google hasn\'t verified this app)라는 위협적인 경고가 표시되면:<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;1. 당황하지 마시고 좌측 하단의 회색 글씨 <strong>[고급]</strong> (Advanced) 링크를 클릭합니다.<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;2. 아래쪽에 새롭게 나타나는 <strong>[프로젝트명(으)로 이동(안전하지 않음)]</strong> (Go to ProjectName (unsafe)) 링크를 누릅니다.<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;3. 권한 요약 확인 창에서 우측 하단의 <strong>[허용]</strong> (Allow) 버튼을 최종 클릭합니다.
+                            </div>
+                        </div>
+
+                        <!-- Step 5 -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; color: #f59e0b; margin-bottom: 8px;">5. 웹 앱 URL 등록 및 완성</div>
+                            <div style="color: var(--text-primary);">
+                                • 배포가 완료되면 화면에 생성되는 **[웹 앱 URL]** 주소를 복사합니다.<br>
+                                <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 8px;">(예시 포맷: https://script.google.com/macros/s/AKfycb.../exec)</span>
+                                • 이 가이드 모달을 닫고, 마스터 대시보드의 **[자동 메일 발송 설정]** 주소창에 붙여넣은 뒤 <strong>[저장]</strong>을 클릭하면 모든 준비가 완료됩니다.
+                            </div>
+                        </div>
+
+                        <!-- 💡 팁 -->
+                        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 16px;">
+                            <div style="font-weight: 700; font-size: 13px; color: #10b981; margin-bottom: 6px;">💡 꼭 기억하세요!</div>
+                            <div style="color: var(--text-secondary); font-size: 12px; line-height: 1.5;">
+                                • 메일은 이 스크립트를 배포한 구글 계정의 Gmail 권한으로 발송되며, 본인의 **보낸편지함**에서 실시간 발송 내역을 조회할 수 있습니다.<br>
+                                • 주소를 지우거나 비워둔 채 저장하면 메일 Sandbox 팝업(mailto 수동 승인 창)으로 자동 폴백 처리됩니다.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 푸터 -->
+                    <div style="display: flex; justify-content: flex-end; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 14px;">
+                        <button id="close-guide-confirm-btn" style="
+                            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+                            color: white; border: none; padding: 8px 24px; border-radius: 8px;
+                            font-size: 12.5px; font-weight: 600; cursor: pointer;
+                            transition: opacity 0.2s;
+                        ">이해했습니다</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const modal = document.getElementById(modalId);
+        const closeBtn = document.getElementById('close-guide-btn');
+        const confirmBtn = document.getElementById('close-guide-confirm-btn');
+        const copyBtn = document.getElementById('btn-copy-gas');
+
+        const closeModal = () => modal.remove();
+        closeBtn.onclick = closeModal;
+        confirmBtn.onclick = closeModal;
+
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal();
+        };
+
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(gasCode).then(() => {
+                copyBtn.textContent = '복사 완료!';
+                copyBtn.style.background = 'rgba(16, 185, 129, 0.2)';
+                copyBtn.style.color = '#10b981';
+                copyBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                setTimeout(() => {
+                    copyBtn.textContent = '코드 복사';
+                    copyBtn.style.background = 'rgba(56, 189, 248, 0.15)';
+                    copyBtn.style.color = '#38bdf8';
+                    copyBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                }, 2000);
+            }).catch(err => {
+                alert('코드 복사에 실패했습니다. 직접 선택하여 복사해 주세요.');
+            });
+        };
+    }
+
+    function renderViewStats() {
+        const widget = document.getElementById('course-view-stats-widget');
+        const textEl = document.getElementById('course-view-stats-text');
+        const fillEl = document.getElementById('course-view-stats-fill');
+        if (!widget || !textEl || !fillEl) return;
+
+        const { course } = adminConfig;
+        if (!course || !course.name) {
+            widget.style.display = 'none';
+            return;
+        }
+
+        const dataKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
+        const rawData = localStorage.getItem(dataKey);
+        if (!rawData) {
+            widget.style.display = 'block';
+            textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>성적 데이터가 업로드되지 않았습니다. Excel 파일을 업로드해 주세요.`;
+            fillEl.style.width = '0%';
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(rawData);
+            const studentEntries = Object.values(parsed.students || {});
+            const totalCount = studentEntries.length;
+            if (totalCount === 0) {
+                widget.style.display = 'block';
+                textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>등록된 수강생이 없습니다.`;
+                fillEl.style.width = '0%';
+                return;
+            }
+
+            // check if we have hashes
+            const hasHashes = studentEntries.some(s => s.student_id_hash);
+            if (!hasHashes) {
+                widget.style.display = 'block';
+                textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>⚠️ 기존 데이터 형식을 사용 중입니다. 성적 Excel 파일을 다시 업로드하면 실시간 열람 통계가 제공됩니다.`;
+                fillEl.style.width = '0%';
+                return;
+            }
+
+            const viewLogs = JSON.parse(localStorage.getItem('scorequery_view_logs') || '[]');
+            const subjectId = `${course.year}_${course.semester}_${course.name}`;
+            const subjectLogs = viewLogs.filter(log => log.subjectId === subjectId);
+            const viewedHashes = new Set(subjectLogs.map(log => log.sidHash));
+
+            let viewedCount = 0;
+            studentEntries.forEach(s => {
+                if (s.student_id_hash && viewedHashes.has(s.student_id_hash)) {
+                    viewedCount++;
+                }
+            });
+
+            const percent = ((viewedCount / totalCount) * 100).toFixed(1);
+            widget.style.display = 'block';
+            textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>현재 수강생 총 <strong>${totalCount}</strong>명 중 <strong>${viewedCount}</strong>명(열람율 <strong>${percent}%</strong>)이 성적을 확인했습니다.`;
+            fillEl.style.width = `${percent}%`;
+
+        } catch (e) {
+            console.error('Error rendering view stats:', e);
+            widget.style.display = 'none';
+        }
+    }
+
+    function handlePasswordStrength(e) {
+        const val = e.target.value;
+        let score = 0;
+        if (val.length >= 8) score++;
+        if (val.length >= 12) score++;
+        if (/[a-z]/.test(val)) score++;
+        if (/[A-Z]/.test(val)) score++;
+        if (/\d/.test(val)) score++;
+        if (/[!@#$%^&*(),.?":{}|<>_+\-=\[\]{};':"\\|,.<>\/?]/.test(val)) score++;
+
+        const textEl = document.getElementById('pw-strength-text');
+        const bar1 = document.getElementById('pw-strength-bar-1');
+        const bar2 = document.getElementById('pw-strength-bar-2');
+        const bar3 = document.getElementById('pw-strength-bar-3');
+        const bar4 = document.getElementById('pw-strength-bar-4');
+
+        if (!textEl || !bar1 || !bar2 || !bar3 || !bar4) return;
+
+        // Reset colors
+        bar1.style.backgroundColor = 'transparent';
+        bar2.style.backgroundColor = 'transparent';
+        bar3.style.backgroundColor = 'transparent';
+        bar4.style.backgroundColor = 'transparent';
+
+        if (!val) {
+            textEl.textContent = '매우 위험';
+            textEl.style.color = '#ef4444';
+            return;
+        }
+
+        if (score <= 2) {
+            textEl.textContent = '매우 위험';
+            textEl.style.color = '#ef4444';
+            bar1.style.backgroundColor = '#ef4444';
+        } else if (score === 3 || score === 4) {
+            textEl.textContent = '약함';
+            textEl.style.color = '#f97316';
+            bar1.style.backgroundColor = '#f97316';
+            bar2.style.backgroundColor = '#f97316';
+        } else if (score === 5) {
+            textEl.textContent = '보통';
+            textEl.style.color = '#eab308';
+            bar1.style.backgroundColor = '#eab308';
+            bar2.style.backgroundColor = '#eab308';
+            bar3.style.backgroundColor = '#eab308';
+        } else {
+            textEl.textContent = '안전';
+            textEl.style.color = '#22c55e';
+            bar1.style.backgroundColor = '#22c55e';
+            bar2.style.backgroundColor = '#22c55e';
+            bar3.style.backgroundColor = '#22c55e';
+            bar4.style.backgroundColor = '#22c55e';
+        }
+    }
+
     // Expose mode functions for app.js
     window.ScoreQueryAdmin = {
         showModeSelection,
         enterStudentMode,
     };
+    
+    // (이하 소스코드의 종료 브래킷)
 })();
