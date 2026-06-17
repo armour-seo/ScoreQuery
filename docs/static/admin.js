@@ -181,6 +181,14 @@
             adminConfig.courses.forEach(c => { if (c.name) names.add(c.name); });
         }
 
+        // 전체 공개된 과목도 후보에 추가
+        if (typeof window.getAvailableCourses === 'function') {
+            const allCourses = window.getAvailableCourses();
+            allCourses.forEach(c => {
+                if (c.name) names.add(c.name);
+            });
+        }
+
         names.forEach(name => {
             const opt = document.createElement('option');
             opt.value = name;
