@@ -81,6 +81,32 @@
         checkStudentLock();
         checkScheduleAndControl();
         loadAvailableCoursesAsync();
+
+        // 성적표 이미지 저장 이벤트
+        const btnSaveImage = document.getElementById('btn-save-image');
+        if (btnSaveImage) {
+            btnSaveImage.addEventListener('click', () => {
+                const target = document.getElementById('result-section');
+                if (target && window.html2canvas) {
+                    const originalActions = document.querySelector('.result-actions');
+                    const originalLogout = document.getElementById('logout-btn');
+                    if(originalActions) originalActions.style.display = 'none';
+                    if(originalLogout) originalLogout.style.display = 'none';
+                    
+                    window.html2canvas(target, { backgroundColor: '#0f172a', scale: 2 }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `성적표_${selectedCourse?.year}_${selectedCourse?.name}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        
+                        if(originalActions) originalActions.style.display = 'flex';
+                        if(originalLogout) originalLogout.style.display = '';
+                    });
+                } else if (!window.html2canvas) {
+                    alert('이미지 저장 라이브러리를 불러오지 못했습니다.');
+                }
+            });
+        }
     });
 
     // 과목 선택 시 공시 상태 확인 후 인증 필드 표시
@@ -473,16 +499,41 @@
         resultSection.classList.add('visible');
 
         // 상단 바에 과목+교수 정보 표시
+        let profEmail = '';
         if (selectedCourse) {
             const titleEl = document.getElementById('top-bar-title');
             titleEl.textContent = `성적조회시스템: ${selectedCourse.year}-${selectedCourse.semester}-${selectedCourse.name}`;
             try {
                 const cfg = JSON.parse(localStorage.getItem('scorequery_config') || '{}');
                 if (cfg.professor && cfg.professor.name) {
+                    profEmail = cfg.professor.email || 'armour@tu.ac.kr';
                     const profEl = document.getElementById('top-bar-prof');
-                    profEl.textContent = `담당교수: ${cfg.professor.name}(${cfg.professor.email || ''})`;
+                    profEl.textContent = `담당교수: ${cfg.professor.name}(${profEmail})`;
                 }
             } catch {}
+        }
+
+        // 글로벌 공지사항 표시 (gradeData.schedule.notice 활용)
+        const noticeBox = document.getElementById('student-notice-box');
+        const noticeText = document.getElementById('student-notice-text');
+        if (gradeData && gradeData.schedule && gradeData.schedule.notice) {
+            noticeText.innerHTML = gradeData.schedule.notice.replace(/\n/g, '<br>');
+            noticeBox.style.display = 'block';
+        } else {
+            noticeBox.style.display = 'none';
+        }
+
+        // 이의신청 버튼 이메일 연동
+        const appealBtn = document.getElementById('btn-appeal-email');
+        if (appealBtn) {
+            if (profEmail) {
+                const subject = encodeURIComponent(`[성적문의] ${selectedCourse?.name} - ${student.student_id_masked} ${student.name_masked}`);
+                const body = encodeURIComponent(`교수님 안녕하세요,\n\n${selectedCourse?.name} 과목 성적 관련하여 문의드립니다.\n\n- 학번: ${student.student_id_masked}\n- 이름: ${student.name_masked}\n- 문의내용:\n\n`);
+                appealBtn.href = `mailto:${profEmail}?subject=${subject}&body=${body}`;
+                appealBtn.style.display = 'flex';
+            } else {
+                appealBtn.style.display = 'none';
+            }
         }
 
         document.getElementById('avatar-initial').textContent = student.name_masked[0];

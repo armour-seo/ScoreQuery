@@ -93,9 +93,11 @@ def build():
     first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
     headers = [str(cell).strip() if cell is not None else "" for cell in first_row]
     
-    def find_idx(keywords):
+    def find_idx(keywords, exclude_keywords=None):
         for idx, h in enumerate(headers):
             if any(kw in h for kw in keywords):
+                if exclude_keywords and any(ex in h for ex in exclude_keywords):
+                    continue
                 return idx
         return None
 
@@ -110,9 +112,9 @@ def build():
         "midterm": find_idx(["중간"]),
         "final": find_idx(["기말"]),
         "total": find_idx(["총점"]),
-        "rank": find_idx(["석차", "순위", "등수"]),
+        "rank": find_idx(["석차", "순위", "등수"], exclude_keywords=["결석"]),
         "grade": find_idx(["학점", "평점", "등급"]),
-        "absences": find_idx(["결석"]),
+        "absences": find_idx(["결석", "결석횟수", "결석차시"]),
         "remark": find_idx(["비고"]),
     }
 

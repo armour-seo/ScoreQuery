@@ -1244,9 +1244,9 @@
 
     // ── 유연한 컬럼 매핑 ──
     function mapColumns(headers) {
-        const find = (keywords) => {
+        const find = (keywords, excludeKeywords = []) => {
             for (const kw of keywords) {
-                const found = headers.find(h => h.includes(kw));
+                const found = headers.find(h => h.includes(kw) && !excludeKeywords.some(ex => h.includes(ex)));
                 if (found) return found;
             }
             return null;
@@ -1262,9 +1262,9 @@
             exclude:   find(['상대평가제외', '제외']),
             special:   find(['특별점수', '특별']),
             total:     find(['총점', '합계']),
-            rank:      find(['석차', '순위', '등수']),
-            grade:     find(['학점', '등급']),
-            absences:  find(['결석', '결석횟수']),
+            rank:      find(['석차', '순위', '등수'], ['결석']),
+            grade:     find(['학점', '평점', '등급']),
+            absences:  find(['결석', '결석횟수', '결석차시']),
             remark:    find(['비고', '메모', '참고']),
             eval: {},  // 평가항목별 매핑
             evalDetected: [], // 자동 감지된 평가 항목
@@ -1752,6 +1752,10 @@
             const calculatedSum = Object.values(scores).reduce((sum, v) => sum + (v || 0), 0) + specialScore;
             const finalCalculatedTotal = parseFloat(calculatedSum.toFixed(2));
 
+            // 엑셀 총점 우선 사용
+            const excelTotal = (mapping.total && row[mapping.total] !== undefined && row[mapping.total] !== '') ? parseFloat(row[mapping.total]) : null;
+            const finalTotal = (excelTotal !== null && !isNaN(excelTotal)) ? parseFloat(excelTotal.toFixed(2)) : finalCalculatedTotal;
+
             // 총점 불일치 검증
             if (mapping.total && totalScore !== 0) {
                 if (Math.abs(finalCalculatedTotal - totalScore) > 0.5) {
@@ -1766,16 +1770,17 @@
             }
 
             // 변환된 행(미리보기 및 다운로드용) 데이터 동기화
+            let cRowRef = null;
             if (converted && converted.headers && converted.rows) {
-                const cRow = converted.rows[rowIndex];
-                if (cRow) {
+                cRowRef = converted.rows[rowIndex];
+                if (cRowRef) {
                     evalPairs.forEach(({ evalItem }) => {
                         const r = evalItem.ratio > 0 ? `(${evalItem.ratio}%)` : '';
                         const headerName = `${evalItem.label}${r}`;
                         const sVal = scores[`${evalItem.id}_score`];
-                        cRow[headerName] = sVal !== null ? sVal : '';
+                        cRowRef[headerName] = sVal !== null ? sVal : '';
                     });
-                    cRow['총점'] = finalCalculatedTotal;
+                    cRowRef['총점'] = finalTotal;
                 }
             }
             rowIndex++;
@@ -1788,11 +1793,12 @@
                 name_masked: nameMasked,
                 ...scores,
                 special_score: specialScore || null,
-                total_score: finalCalculatedTotal,
-                rank: rank || `- / -`,
-                grade: grade || '',
+                total_score: finalTotal,
+                rank: rank || `-`,
+                grade: grade || '-',
                 absences: absences,
                 remark: remark,
+                _cRow: cRowRef // 임시 참조 저장
             };
 
             students[hashKey] = entry;
@@ -1813,6 +1819,23 @@
             classCounts[cn] = entries.length;
             classAvg[cn] = {};
             classMax[cn] = {};
+
+            // 자동 석차 및 학점 부여 로직 제거 -> 엑셀 원본 값 그대로 연동
+            entries.forEach((e) => {
+                if (e.rank === undefined || e.rank === null || e.rank === '') {
+                    e.rank = '-';
+                } else {
+                    e.rank = String(e.rank).trim();
+                }
+
+                if (e.grade === undefined || e.grade === null || e.grade === '') {
+                    e.grade = '-';
+                } else {
+                    e.grade = String(e.grade).trim();
+                }
+
+                delete e._cRow; // 임시 참조 제거
+            });
 
             scoreKeys.forEach(key => {
                 const vals = entries.map(e => e[key]).filter(v => v !== null && v !== undefined);
