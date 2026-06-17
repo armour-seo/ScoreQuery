@@ -1,11 +1,11 @@
 /**
  * ScoreQuery ??Frontend Logic
- * ?�적 조회 ?�스???�론?�엔?? */
+ * ?적 조회 ?스???론?엔?? */
 
 (() => {
     'use strict';
 
-    // ?�?� DOM References ?�?�
+    // ?? DOM References ??
     const loginSection = document.getElementById('login-section');
     const resultSection = document.getElementById('result-section');
     const loginForm = document.getElementById('login-form');
@@ -15,33 +15,33 @@
     const errorMsg = document.getElementById('error-message');
     const logoutBtn = document.getElementById('logout-btn');
 
-    // ?�?� Score Card Config ?�?�
+    // ?? Score Card Config ??
     const SCORE_FIELDS = [
-        { key: 'quiz_score', label: '?�즈', icon: '?��', max: 30, cssClass: 'card-quiz' },
-        { key: 'attendance_score', label: '출석', icon: '?��', max: 30, cssClass: 'card-attendance' },
-        { key: 'midterm_score', label: '중간고사', icon: '?��', max: 20, cssClass: 'card-midterm' },
-        { key: 'final_score', label: '기말고사', icon: '?��', max: 20, cssClass: 'card-final' },
-        { key: 'total_score', label: '총점', icon: '?��', max: 100, cssClass: 'card-total' },
+        { key: 'quiz_score', label: '?즈', icon: '?', max: 30, cssClass: 'card-quiz' },
+        { key: 'attendance_score', label: '출석', icon: '?', max: 30, cssClass: 'card-attendance' },
+        { key: 'midterm_score', label: '중간고사', icon: '?', max: 20, cssClass: 'card-midterm' },
+        { key: 'final_score', label: '기말고사', icon: '?', max: 20, cssClass: 'card-final' },
+        { key: 'total_score', label: '총점', icon: '?', max: 100, cssClass: 'card-total' },
     ];
 
-    // ?�?� Chart Instance ?�?�
+    // ?? Chart Instance ??
     let radarChart = null;
 
-    // ?�?� Event Listeners ?�?�
+    // ?? Event Listeners ??
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
 
-    // ?�화번호 ?�력 ???�자�??�용, 4?�리 ?�한
+    // ?화번호 ?력 ???자??용, 4?리 ?한
     phoneLast4Input.addEventListener('input', (e) => {
         e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
     });
 
-    // ?�번 ?�력 ???�자�??�용
+    // ?번 ?력 ???자??용
     studentIdInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.replace(/[^0-9]/g, '');
     });
 
-    // ?�?� Login Handler ?�?�
+    // ?? Login Handler ??
     async function handleLogin(e) {
         e.preventDefault();
         hideError();
@@ -50,12 +50,12 @@
         const phoneLast4 = phoneLast4Input.value.trim();
 
         if (!studentId || !phoneLast4) {
-            showError('?�번�??�화번호 ?�자리�? 모두 ?�력??주세??');
+            showError('?번??화번호 ?자리? 모두 ?력??주세??');
             return;
         }
 
         if (phoneLast4.length !== 4) {
-            showError('?�화번호 ?�자�?4?�리�??�확???�력??주세??');
+            showError('?화번호 ?자?4?리??확???력??주세??');
             return;
         }
 
@@ -71,20 +71,20 @@
             const data = await res.json();
 
             if (!res.ok) {
-                showError(data.error || '조회???�패?�습?�다.');
+                showError(data.error || '조회???패?습?다.');
                 setLoading(false);
                 return;
             }
 
             renderResult(data);
         } catch (err) {
-            showError('?�버???�결?????�습?�다.\n?�시 ???�시 ?�도??주세??');
+            showError('?버???결?????습?다.\n?시 ???시 ?도??주세??');
         } finally {
             setLoading(false);
         }
     }
 
-    // ?�?� Logout Handler ?�?�
+    // ?? Logout Handler ??
     function handleLogout() {
         resultSection.classList.remove('visible');
         loginSection.style.display = '';
@@ -96,10 +96,10 @@
             radarChart = null;
         }
 
-        // 부?�러???�환 ???�간???�레?????�크�?        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+        // 부?러???환 ???간???레?????크?        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
     }
 
-    // ?�?� Render Result ?�?�
+    // ?? Render Result ??
     function renderResult(data) {
         const { student, class_avg, class_max, class_count } = data;
 
@@ -126,14 +126,21 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ?�?� Render Score Cards ?�?�
+    // ?? Render Score Cards ??
     function renderScoreCards(student, classAvg) {
         const container = document.getElementById('score-cards');
         container.innerHTML = '';
 
         SCORE_FIELDS.forEach((field) => {
-            const value = student[field.key];
-            const avg = classAvg[field.key];
+            let value = student[field.key];
+            let avg = classAvg[field.key];
+
+            // 근거가 되는 점수는 소수점 첫째 자리에서 반올림 (정수형 변환)
+            if (field.key !== 'total_score') {
+                if (value !== null && value !== undefined) value = Math.round(value);
+                if (avg !== null && avg !== undefined) avg = Math.round(avg);
+            }
+
             const displayVal = value !== null && value !== undefined ? value : '-';
             const pct = value !== null && value !== undefined ? (value / field.max) * 100 : 0;
             const avgDisplay = avg !== null && avg !== undefined ? avg : '-';
@@ -150,13 +157,13 @@
                 </div>
                 <div class="card-avg-hint">
                     <span class="avg-dot"></span>
-                    분반 ?�균 ${avgDisplay}
+                    분반 ?균 ${avgDisplay}
                 </div>
             `;
             container.appendChild(card);
         });
 
-        // ?�로그레?�바 ?�니메이??(?�간???�레??
+        // ?로그레?바 ?니메이??(?간???레??
         requestAnimationFrame(() => {
             setTimeout(() => {
                 container.querySelectorAll('.progress-fill').forEach((bar) => {
@@ -166,7 +173,7 @@
         });
     }
 
-    // ?�?� Render Radar Chart ?�?�
+    // ?? Render Radar Chart ??
     function renderRadarChart(student, classAvg, classMax) {
         const ctx = document.getElementById('radar-chart').getContext('2d');
 
@@ -174,16 +181,25 @@
             radarChart.destroy();
         }
 
-        // 만점 ?��?% 변??        const labels = [];
+        // 만점 대비 % 변환
+        const labels = [];
         const myData = [];
         const avgData = [];
         const maxData = [];
 
         SCORE_FIELDS.forEach((field) => {
             labels.push(field.label);
-            const myVal = student[field.key];
-            const avgVal = classAvg[field.key];
-            const maxVal = classMax[field.key];
+            let myVal = student[field.key];
+            let avgVal = classAvg[field.key];
+            let maxVal = classMax[field.key];
+
+            // 근거가 되는 점수는 소수점 첫째 자리에서 반올림
+            if (field.key !== 'total_score') {
+                if (myVal !== null && myVal !== undefined) myVal = Math.round(myVal);
+                if (avgVal !== null && avgVal !== undefined) avgVal = Math.round(avgVal);
+                if (maxVal !== null && maxVal !== undefined) maxVal = Math.round(maxVal);
+            }
+
             myData.push(myVal !== null && myVal !== undefined ? Math.round((myVal / field.max) * 100) : 0);
             avgData.push(avgVal !== null && avgVal !== undefined ? Math.round((avgVal / field.max) * 100) : 0);
             maxData.push(maxVal !== null && maxVal !== undefined ? Math.round((maxVal / field.max) * 100) : 0);
@@ -195,7 +211,7 @@
                 labels: labels,
                 datasets: [
                     {
-                        label: '???�수',
+                        label: '???수',
                         data: myData,
                         backgroundColor: 'rgba(99, 102, 241, 0.15)',
                         borderColor: 'rgba(129, 140, 248, 0.8)',
@@ -207,7 +223,7 @@
                         pointHoverRadius: 7,
                     },
                     {
-                        label: '분반 ?�균',
+                        label: '분반 ?균',
                         data: avgData,
                         backgroundColor: 'rgba(248, 113, 113, 0.08)',
                         borderColor: 'rgba(248, 113, 113, 0.5)',
@@ -220,7 +236,7 @@
                         pointHoverRadius: 6,
                     },
                     {
-                        label: '최고?�수',
+                        label: '최고?수',
                         data: maxData,
                         backgroundColor: 'rgba(250, 204, 21, 0.05)',
                         borderColor: 'rgba(250, 204, 21, 0.4)',
@@ -237,6 +253,14 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
+                layout: {
+                    padding: {
+                        top: 5,
+                        bottom: 25,
+                        left: 10,
+                        right: 10
+                    }
+                },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -282,18 +306,18 @@
         });
     }
 
-    // ?�?� Render Summary ?�?�
+    // ?? Render Summary ??
     function renderSummary(student, classCount) {
-        // ?�점 뱃�?
+        // ?점 뱃?
         const gradeEl = document.getElementById('summary-grade');
         const gradeText = student.grade || '-';
         const gradeClass = getGradeClass(gradeText);
         gradeEl.innerHTML = `<span class="grade-badge ${gradeClass}">${gradeText}</span>`;
 
-        // ?�차
+        // ?차
         document.getElementById('summary-rank').textContent = student.rank;
 
-        // 결석 (개근 ?�시)
+        // 결석 (개근 ?시)
         const absencesEl = document.getElementById('summary-absences');
         if (student.absences === 0) {
             absencesEl.innerHTML = `<span class="attendance-perfect"><span class="perfect-badge">??개근</span> 0??/span>`;
@@ -316,7 +340,7 @@
         }
     }
 
-    // ?�?� Utilities ?�?�
+    // ?? Utilities ??
     function getGradeClass(grade) {
         if (!grade || grade === '-') return 'grade-f';
         const first = grade[0].toUpperCase();

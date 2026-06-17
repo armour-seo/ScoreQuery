@@ -554,8 +554,15 @@
         container.innerHTML = '';
 
         getScoreFields(gradeData).forEach((field) => {
-            const value = student[field.key];
-            const avg = classAvg[field.key];
+            let value = student[field.key];
+            let avg = classAvg[field.key];
+
+            // 근거가 되는 점수는 소수점 첫째 자리에서 반올림 (정수형 변환)
+            if (field.key !== 'total_score') {
+                if (value !== null && value !== undefined) value = Math.round(value);
+                if (avg !== null && avg !== undefined) avg = Math.round(avg);
+            }
+
             const displayVal = value !== null && value !== undefined ? value : '-';
             const pct = value !== null && value !== undefined ? (value / field.max) * 100 : 0;
             const avgDisplay = avg !== null && avg !== undefined ? avg : '-';
@@ -568,7 +575,8 @@
                 const diff = value - avg;
                 const sign = diff >= 0 ? '+' : '';
                 const color = diff >= 0 ? '#4ade80' : '#fbbf24';
-                diffHtml = `<div class="card-diff-hint" style="color:${color}; font-weight:700;">${sign}${diff.toFixed(1)}</div>`;
+                const diffText = field.key === 'total_score' ? diff.toFixed(1) : Math.round(diff).toString();
+                diffHtml = `<div class="card-diff-hint" style="color:${color}; font-weight:700;">${sign}${diffText}</div>`;
             }
 
             card.innerHTML = `
@@ -612,9 +620,17 @@
 
         getScoreFields(gradeData).forEach((field) => {
             labels.push(field.label);
-            const myVal = student[field.key];
-            const avgVal = classAvg[field.key];
-            const maxVal = classMax[field.key];
+            let myVal = student[field.key];
+            let avgVal = classAvg[field.key];
+            let maxVal = classMax[field.key];
+
+            // 근거가 되는 점수는 소수점 첫째 자리에서 반올림
+            if (field.key !== 'total_score') {
+                if (myVal !== null && myVal !== undefined) myVal = Math.round(myVal);
+                if (avgVal !== null && avgVal !== undefined) avgVal = Math.round(avgVal);
+                if (maxVal !== null && maxVal !== undefined) maxVal = Math.round(maxVal);
+            }
+
             myData.push(myVal !== null && myVal !== undefined ? Math.round((myVal / field.max) * 100) : 0);
             avgData.push(avgVal !== null && avgVal !== undefined ? Math.round((avgVal / field.max) * 100) : 0);
             maxData.push(maxVal !== null && maxVal !== undefined ? Math.round((maxVal / field.max) * 100) : 0);
@@ -668,6 +684,14 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
+                layout: {
+                    padding: {
+                        top: 5,
+                        bottom: 25,
+                        left: 10,
+                        right: 10
+                    }
+                },
                 plugins: {
                     legend: { display: false },
                     tooltip: {

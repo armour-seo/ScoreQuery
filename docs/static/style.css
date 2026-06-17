@@ -668,7 +668,7 @@ select.form-input option {
 .chart-container {
     position: relative;
     width: 100%;
-    max-width: 380px;
+    max-width: 310px;
     margin: 0 auto;
     aspect-ratio: 1;
 }
@@ -2051,7 +2051,7 @@ select.form-input option {
     }
 
     .chart-container {
-        max-width: 300px;
+        max-width: 280px;
     }
 
     .result-header {
