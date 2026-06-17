@@ -200,9 +200,9 @@
                 if (maxVal !== null && maxVal !== undefined) maxVal = Math.round(maxVal);
             }
 
-            myData.push(myVal !== null && myVal !== undefined ? Math.round((myVal / field.max) * 100) : 0);
-            avgData.push(avgVal !== null && avgVal !== undefined ? Math.round((avgVal / field.max) * 100) : 0);
-            maxData.push(maxVal !== null && maxVal !== undefined ? Math.round((maxVal / field.max) * 100) : 0);
+            myData.push(myVal !== null && myVal !== undefined ? Math.max(0, Math.min(Math.round((myVal / field.max) * 100), 100)) : 0);
+            avgData.push(avgVal !== null && avgVal !== undefined ? Math.max(0, Math.min(Math.round((avgVal / field.max) * 100), 100)) : 0);
+            maxData.push(maxVal !== null && maxVal !== undefined ? Math.max(0, Math.min(Math.round((maxVal / field.max) * 100), 100)) : 0);
         });
 
         radarChart = new Chart(ctx, {
