@@ -2517,7 +2517,10 @@
         // Mode selection
         modeStudentBtn.addEventListener('click', enterStudentMode);
         modeAdminBtn.addEventListener('click', enterAdminMode);
-        loginBackBtn.addEventListener('click', showModeSelection);
+        loginBackBtn.addEventListener('click', () => {
+            handleLogoutAction();
+            showModeSelection();
+        });
 
         // Load config toggle & auth
         document.getElementById('btn-load-toggle').addEventListener('click', () => {

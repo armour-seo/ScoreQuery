@@ -96,6 +96,44 @@
         });
     }
 
+    // 처음으로 버튼 클릭 시 학생 모드 상태 및 일정 초기화
+    const loginBackBtn = document.getElementById('login-back-btn');
+    if (loginBackBtn) {
+        loginBackBtn.addEventListener('click', () => {
+            // 학생 모드 입력 폼 리셋 및 에러 메시지 초기화
+            if (loginForm) loginForm.reset();
+            hideError();
+            selectedCourse = null;
+            gradeData = null;
+            if (courseSelect) {
+                courseSelect.value = '';
+                courseSelect.classList.add('select-unselected');
+            }
+            if (authGroup) {
+                authGroup.style.display = 'none';
+            }
+            const courseInfo = document.getElementById('login-course-info');
+            if (courseInfo) {
+                courseInfo.textContent = '과목을 선택하면 성적을 조회할 수 있습니다';
+            }
+
+            // 스케줄 카운트다운 타이머 정지 및 초기화
+            if (scheduleInterval) {
+                clearInterval(scheduleInterval);
+                scheduleInterval = null;
+            }
+
+            const blockEl = document.getElementById('student-schedule-block');
+            if (blockEl) {
+                blockEl.style.display = 'none';
+                blockEl.innerHTML = '';
+            }
+            if (loginForm) {
+                loginForm.style.display = '';
+            }
+        });
+    }
+
     // 즉시 및 로드 시 체크
     checkStudentLock();
     checkScheduleAndControl();
@@ -859,11 +897,23 @@
     }
 
     function checkScheduleAndControl() {
+        // 교수자(관리자) 세션이 있으면 일정 블록을 무시하고 조회를 허용합니다. (테스트 목적)
+        let isAdmin = false;
+        try {
+            const sess = sessionStorage.getItem('scorequery_session');
+            if (sess) {
+                const user = JSON.parse(sess);
+                if (user && (user.isMaster || user.status === 'approved')) {
+                    isAdmin = true;
+                }
+            }
+        } catch (e) {}
+
         const scheduleRaw = localStorage.getItem('scorequery_schedule');
         const blockEl = document.getElementById('student-schedule-block');
         if (!blockEl) return;
 
-        if (!scheduleRaw) {
+        if (!scheduleRaw || isAdmin) {
             blockEl.style.display = 'none';
             loginForm.style.display = '';
             if (scheduleInterval) {
