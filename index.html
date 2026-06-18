@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="성적 조회 및 관리 시스템">
+    <meta name="robots" content="noindex, nofollow">
+    <title>ScoreQuery — 성적 관리</title>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="static/style.css">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+    <!-- SheetJS CDN (Excel 생성) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+
+    <!-- Favicon (data URI) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+</head>
+<body>
+    <div class="container">
+
+        <!-- ═══════════════════════════════════
+             TOP BAR
+             ═══════════════════════════════════ -->
+        <header class="top-bar" id="top-bar">
+            <div class="top-bar-title" id="top-bar-title">📊 성적 관리 시스템</div>
+            <div class="top-bar-prof" id="top-bar-prof"></div>
+        </header>
+
+
+        <!-- ═══════════════════════════════════
+             MODE SELECTION
+             ═══════════════════════════════════ -->
+        <section class="mode-section" id="mode-section">
+            <div class="ambient-light light-admin"></div>
+            <div class="ambient-light light-student"></div>
+
+            <div class="mode-header staggered-item" style="--delay: 0.1s">
+                <h1 class="gradient-text"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 8px; margin-bottom: 4px;"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>ScoreQuery</h1>
+                <p>성적 조회 · 관리 시스템</p>
+            </div>
+            
+            <div class="mode-cards">
+                <div class="mode-card mode-admin staggered-item" style="--delay: 0.2s" id="mode-admin-btn">
+                    <div class="mode-card-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                    <div class="mode-card-title">교수 모드</div>
+                    <div class="mode-card-desc">과목을 설정하고<br>성적 템플릿을 생성합니다</div>
+                </div>
+                <div class="mode-card mode-student staggered-item" style="--delay: 0.3s" id="mode-student-btn">
+                    <div class="mode-card-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                    </div>
+                    <div class="mode-card-title">학생 모드</div>
+                    <div class="mode-card-desc">성적을 조회합니다<br>학번과 전화번호로 인증</div>
+                </div>
+            </div>
+
+            <!-- 새로 추가된 정보 메시지 -->
+            <div class="mode-info-box staggered-item" style="--delay: 0.4s">
+                <div class="info-badge">💡 Notice</div>
+                <p>이 시스템은 서창갑교수의 개인 창작물이며 계속 버전업하고 있습니다.<br>교수님들께서는 학생들과는 다른 경로이용으로 부득이 <strong>회원가입의 절차</strong>를 마련하였습니다.</p>
+            </div>
+
+            <!-- Footer: Ver 1.1 -->
+            <div class="mode-footer staggered-item" style="--delay: 0.5s">
+                성적조회관리시스템 Ver1.1 by <span>서창갑교수 (armour@tu.ac.kr)</span>
+            </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════
+             STUDENT LOGIN SECTION
+             ═══════════════════════════════════ -->
+        <section class="login-section" id="login-section" style="display:none;">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="login-icon">📊</div>
+                    <h1>성적 조회</h1>
+                    <p id="login-course-info">성적을 조회합니다</p>
+                </div>
+
+                <div id="student-schedule-block" style="display:none; margin-bottom: 20px;"></div>
+                <div id="student-lock-timer" style="display:none; margin-bottom: 20px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); color: #f87171; font-size: 13px; font-weight: 500; text-align: center; line-height: 1.5;"></div>
+
+                <form id="login-form" autocomplete="off">
+                    <!-- 과목 선택 -->
+                    <div class="course-select-group" id="student-course-group">
+                        <div class="form-group">
+                            <label class="form-label" for="stu-course-select">📚 과목 선택</label>
+                            <select id="stu-course-select" class="form-input select-unselected" required>
+                                <option value="">과목을 선택하세요</option>
+                                <!-- JS가 동적으로 채움 -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="student-auth-group" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label" for="student-id">학번</label>
+                            <input
+                                type="text"
+                                id="student-id"
+                                class="form-input"
+                                placeholder="학번 8자리를 입력하세요"
+                                inputmode="numeric"
+                                maxlength="10"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="phone-last4">전화번호 뒷자리</label>
+                            <input
+                                type="password"
+                                id="phone-last4"
+                                class="form-input input-phone"
+                                placeholder="뒷자리 4자리"
+                                inputmode="numeric"
+                                maxlength="4"
+                                required
+                            >
+                        </div>
+
+                        <button type="submit" id="submit-btn" class="btn-primary">
+                            <span class="btn-text">성적 조회</span>
+                            <span class="spinner"></span>
+                        </button>
+                    </div>
+
+                    <div id="error-message" class="error-message"></div>
+                </form>
+
+                <div class="login-footer">
+                    <span class="lock-icon">🔒</span> 입력된 정보는 본인 확인 목적으로만 사용됩니다<br>
+                    개인정보는 서버에 저장되지 않습니다<br>
+                    <button class="btn-home" id="login-back-btn" style="margin-top:12px;">← 처음으로</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════
+             RESULT SECTION (학생 성적 결과)
+             ═══════════════════════════════════ -->
+        <section class="result-section" id="result-section">
+
+            <!-- Header -->
+            <div class="result-header">
+                <div class="student-info">
+                    <div class="student-avatar" id="avatar-initial">—</div>
+                    <div class="student-meta">
+                        <h2 id="student-name">—</h2>
+                        <p id="student-dept">—</p>
+                    </div>
+                </div>
+                <button class="btn-logout" id="logout-btn">← 다시 조회</button>
+            </div>
+
+            <!-- 📢 글로벌 공지사항 박스 -->
+            <div class="student-notice-box" id="student-notice-box" style="display: none; margin-bottom: 20px; padding: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-lg); text-align: left;">
+                <div style="font-weight: 700; color: #fbbf24; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    교수님 공지사항
+                </div>
+                <div id="student-notice-text" style="font-size: 13px; color: #fde68a; line-height: 1.6;"></div>
+            </div>
+
+            <!-- Score Cards -->
+            <div class="score-cards" id="score-cards"></div>
+
+            <!-- Bottom Row: Chart + Summary -->
+            <div class="bottom-row">
+                <div class="chart-card">
+                    <div class="section-title">
+                        <span class="title-icon">📈</span> 분반 평균 비교
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="radar-chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <div class="legend-item">
+                            <span class="legend-dot mine"></span> 내 점수
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot avg"></span> 분반 평균
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot max"></span> 최고점수
+                        </div>
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="section-title">
+                        <span class="title-icon">📋</span> 종합 정보
+                    </div>
+                    <div class="summary-items">
+                        <div class="summary-item">
+                            <span class="summary-label">🎓 평점</span>
+                            <span class="summary-value" id="summary-grade">—</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">🏅 분반 석차</span>
+                            <span class="summary-value" id="summary-rank">—</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">🏆 성적</span>
+                            <span class="summary-value" id="summary-total">—</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">📅 결석</span>
+                            <span class="summary-value" id="summary-absences">—</span>
+                        </div>
+                    </div>
+                    <div class="remark-box" id="remark-box" style="display: none;">
+                        <div class="remark-label">📌 비고</div>
+                        <div class="remark-content" id="remark-content"></div>
+                    </div>
+                    <div class="grade-inquiry-notice" id="grade-inquiry-notice">
+                        <div class="info-badge">💡 Notice</div>
+                        <span style="line-height: 1.6;">성적에 대한 문의는 성적이의신청기간을 통해 교수님께 이메일로 문의바랍니다!</span>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div class="result-footer" id="result-footer">
+                본 성적 정보는 성적 마감 이후 확정된 결과입니다<br>
+                <span style="opacity: 0.5;">ScoreQuery Ver 1.1</span>
+            </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════
+             ADMIN WIZARD SECTION
+             ═══════════════════════════════════ -->
+        <section class="admin-section" id="admin-section">
+
+            <!-- ── Admin Auth Panel (로그인/회원가입) ── -->
+            <div class="auth-panel" id="admin-auth-panel">
+                <!-- 로그인 폼 -->
+                <div class="auth-card" id="admin-login-card">
+                    <div class="auth-card-title">🔐 교수자 로그인</div>
+                    <div class="auth-card-subtitle">성적 관리를 위해 로그인해 주세요</div>
+                    <form id="admin-login-form" autocomplete="off">
+                        <div class="wizard-form-group">
+                            <label for="admin-login-email">이메일 주소</label>
+                            <input type="email" id="admin-login-email" placeholder="professor@university.ac.kr" required>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="admin-login-pw">비밀번호</label>
+                            <input type="password" id="admin-login-pw" placeholder="비밀번호 입력" required>
+                        </div>
+                        <div class="auth-error-message" id="admin-login-error" style="display:none; color:#f87171; font-size:13px; margin-top:8px;"></div>
+                        <button type="submit" class="btn-next" style="width:100%; margin-top:16px;">로그인</button>
+                    </form>
+                    <div class="auth-toggle-link" style="margin-top:16px; text-align:center; font-size:13px; color:var(--text-secondary);">
+                        아직 계정이 없으신가요? <a href="#" id="go-to-register" style="color:var(--accent-blue); text-decoration:none; font-weight:600;">회원가입 신청</a>
+                    </div>
+                    <button class="btn-back" id="auth-back-home" style="width:100%; margin-top:16px;">← 처음으로</button>
+                </div>
+
+                <!-- 회원가입 폼 -->
+                <div class="auth-card" id="admin-register-card" style="display:none;">
+                    <div class="auth-card-title">📝 교수 회원가입 신청</div>
+                    <div class="auth-card-subtitle">회원가입 정보 입력 후 승인 요청을 전송합니다</div>
+                    <form id="admin-register-form" autocomplete="off">
+                        <div class="wizard-form-group">
+                            <label for="reg-name">이름 <span style="color:#f87171;">*</span></label>
+                            <input type="text" id="reg-name" placeholder="홍길동" required>
+                        </div>
+                        <div class="wizard-form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom: 0;">
+                            <div class="wizard-form-group">
+                                <label for="reg-univ">소속 대학</label>
+                                <input type="text" id="reg-univ" placeholder="동명대학교 (선택 사항)">
+                            </div>
+                            <div class="wizard-form-group">
+                                <label for="reg-dept">소속 학과</label>
+                                <input type="text" id="reg-dept" placeholder="경영학과 (선택 사항)">
+                            </div>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="reg-email">이메일 주소 <span style="color:#f87171;">*</span></label>
+                            <input type="email" id="reg-email" placeholder="professor@university.ac.kr" required>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="reg-pw">비밀번호 <span style="color:#f87171;">*</span></label>
+                            <input type="password" id="reg-pw" placeholder="대소문자/특수문자/숫자 포함 8자 이상" required>
+                            
+                            <!-- 비밀번호 실시간 강도 게이지 바 -->
+                            <div class="pw-strength-wrapper" style="margin-top: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px;">
+                                    <span style="color: var(--text-muted);">비밀번호 안전도:</span>
+                                    <span id="pw-strength-text" style="font-weight: 700; color: #ef4444;">매우 위험</span>
+                                </div>
+                                <div class="pw-strength-bg" style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; display: flex; gap: 2px;">
+                                    <div id="pw-strength-bar-1" style="flex: 1; height: 100%; background: transparent; transition: background-color 0.2s;"></div>
+                                    <div id="pw-strength-bar-2" style="flex: 1; height: 100%; background: transparent; transition: background-color 0.2s;"></div>
+                                    <div id="pw-strength-bar-3" style="flex: 1; height: 100%; background: transparent; transition: background-color 0.2s;"></div>
+                                    <div id="pw-strength-bar-4" style="flex: 1; height: 100%; background: transparent; transition: background-color 0.2s;"></div>
+                                </div>
+                            </div>
+
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">⚠️ 영문 대소문자, 숫자, 특수문자를 필수 포함하여 8자 이상 설정해 주세요.</div>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="reg-pw-confirm">비밀번호 재확인 <span style="color:#f87171;">*</span></label>
+                            <input type="password" id="reg-pw-confirm" placeholder="비밀번호 재확인" required>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="reg-phone">전화번호 <span style="color:#f87171;">*</span></label>
+                            <input type="tel" id="reg-phone" placeholder="010-1234-5678" required>
+                        </div>
+                        <div class="auth-error-message" id="admin-register-error" style="display:none; color:#f87171; font-size:13px; margin-top:8px;"></div>
+                        <button type="submit" class="btn-next" style="width:100%; margin-top:16px;">가입 신청</button>
+                    </form>
+                    <div class="auth-toggle-link" style="margin-top:16px; text-align:center; font-size:13px; color:var(--text-secondary);">
+                        이미 계정이 있으신가요? <a href="#" id="go-to-login" style="color:var(--accent-blue); text-decoration:none; font-weight:600;">로그인</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 승인 대기 패널 ── -->
+            <div class="auth-panel" id="admin-pending-panel" style="display:none;">
+                <div class="auth-card pending-card" style="text-align:center;">
+                    <div class="pending-icon" style="font-size:48px; margin-bottom:12px;">⏳</div>
+                    <div class="auth-card-title">가입 승인 대기 중</div>
+                    <div class="auth-card-subtitle" style="margin-bottom:24px; line-height:1.6;">
+                        회원가입 신청이 정상 접수되었습니다.<br>
+                        마스터(서창갑교수)의 가입 승인이 필요합니다.
+                    </div>
+                    
+                    <div class="pending-details" id="pending-details-info" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-glass); border-radius:var(--radius-md); padding:16px; text-align:left; font-size:13px; margin-bottom:20px; line-height:1.8;">
+                        <!-- JS가 채움 -->
+                    </div>
+
+                    <button class="btn-download" id="btn-request-approval" style="width:100%; margin-top:12px; background:linear-gradient(135deg,#3b82f6,#8b5cf6);">
+                        📋 가입 정보 복사 & 승인 요청 (구글 폼)
+                    </button>
+                    <div class="pending-hint" style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                        위 버튼을 클릭하면 내 가입 신청 정보가 클립보드에 복사되고, 서창갑 교수님의 승인 요청 구글 폼으로 이동합니다.
+                    </div>
+                    
+                    <button class="btn-back" id="pending-back-login" style="width:100%; margin-top:24px; border-color:var(--border-glass);">← 로그인으로 돌아가기</button>
+                </div>
+            </div>
+
+            <!-- ── 마스터 전용 가입 승인 대시보드 ── -->
+            <div class="auth-panel" id="admin-master-panel" style="display:none; width:100%;">
+                <div class="master-card" style="background:var(--bg-glass); border:1px solid var(--border-glass); border-radius:var(--radius-xl); padding:var(--space-lg); width:100%;">
+                    <div class="master-header" style="display:flex; justify-content:between; align-items:center; border-bottom:1px solid var(--border-glass); padding-bottom:16px; margin-bottom:16px;">
+                        <div class="master-title" style="font-size:1.25rem; font-weight:700; color:var(--text-primary);">👑 마스터 승인 대시보드</div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-reset-pw" id="master-change-pw-btn" style="padding:6px 12px; font-size:12px;">비밀번호 변경</button>
+                            <button class="btn-logout" id="master-logout-btn" style="padding:6px 12px; font-size:12px;">마스터 로그아웃</button>
+                        </div>
+                    </div>
+                    <div class="master-subtitle" style="font-size:13px; color:var(--text-secondary); margin-bottom:20px;">가입 신청 현황을 검토하고 승인 여부를 결정합니다.</div>
+                    
+                    <!-- ── 구글 앱스 스크립트(GAS) 웹앱 URL 설정 ── -->
+                    <div class="master-settings" style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); text-align: left;">
+                        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #38bdf8; display: flex; align-items: center; justify-content: space-between;">
+                            <span>⚙️ 구글 앱스 스크립트(GAS) 웹앱 URL 설정</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+                            원격 승인 및 데이터베이스 연동을 위한 구글 앱스 스크립트(GAS) 웹앱 URL을 등록합니다.<br>
+                            (등록된 스프레드시트와 실시간 연동되어 가입자 정보를 저장하고 원격 승인 처리를 수행합니다.)
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
+                            <button id="save-gas-url-btn" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">저장</button>
+                            <button id="load-gas-url-btn" style="background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-glass); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" title="로컬 저장소에서 설정된 URL 불러오기">URL 가져오기</button>
+                        </div>
+                    </div>
+                    
+                    <!-- ── 성적 조회 일정 및 D-Day 기간 설정 ── -->
+                    <div class="master-settings" style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); text-align: left;">
+                        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #f59e0b; display: flex; align-items: center; gap: 4px;">
+                            <span>📅 성적 조회 일정 및 D-Day 기간 설정</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+                            성적 조회가 가능한 일정을 설정합니다. 설정된 일정이 아닐 경우 학생 조회 화면이 자동으로 제어됩니다.<br>
+                            (비워둘 경우 상시 조회 가능으로 동작합니다.)
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                            <div>
+                                <label for="schedule-start" style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">시작 일시</label>
+                                <input type="datetime-local" id="schedule-start" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
+                            </div>
+                            <div>
+                                <label for="schedule-end" style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">마감 일시</label>
+                                <input type="datetime-local" id="schedule-end" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="schedule-notice" placeholder="기간 외 노출할 안내 공지문 (선택 사항)" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
+                            <button id="save-schedule-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">일정 저장</button>
+                        </div>
+                    </div>
+                    
+                    <!-- ── 1. 회원가입 신청 현황 (대기/반려) ── -->
+                    <div style="margin-top: 24px; margin-bottom: 8px; font-weight: 700; font-size: 15px; color: #f59e0b; text-align: left; display: flex; align-items: center; gap: 8px;">
+                        <span>📋 회원가입 신청 현황 (대기/반려)</span>
+                        <span id="pending-count-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: bold;">0</span>
+                    </div>
+                    <div class="master-table-wrap" style="overflow-x:auto; margin-bottom: 32px;">
+                        <table class="master-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--border-glass); color:var(--text-secondary);">
+                                    <th style="padding:10px; width: 60px; text-align: center;">No.</th>
+                                    <th style="padding:10px;">이름</th>
+                                    <th style="padding:10px;">소속 대학</th>
+                                    <th style="padding:10px;">소속 학과</th>
+                                    <th style="padding:10px;">이메일</th>
+                                    <th style="padding:10px;">전화번호</th>
+                                    <th style="padding:10px;">가입신청일</th>
+                                    <th style="padding:10px; text-align: center;">상태</th>
+                                    <th style="padding:10px; text-align:center;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="master-pending-list">
+                                <!-- JS가 채움 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ── 2. 등록 회원 관리 (승인 완료) ── -->
+                    <div style="margin-top: 24px; margin-bottom: 8px; font-weight: 700; font-size: 15px; color: #10b981; text-align: left; display: flex; align-items: center; gap: 8px;">
+                        <span>👥 등록 회원 관리 (승인 완료)</span>
+                        <span id="approved-count-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: bold;">0</span>
+                    </div>
+                    <div class="master-table-wrap" style="overflow-x:auto; margin-bottom: 32px;">
+                        <table class="master-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--border-glass); color:var(--text-secondary);">
+                                    <th style="padding:10px; width: 60px; text-align: center;">No.</th>
+                                    <th style="padding:10px;">이름</th>
+                                    <th style="padding:10px;">소속 대학</th>
+                                    <th style="padding:10px;">소속 학과</th>
+                                    <th style="padding:10px;">이메일</th>
+                                    <th style="padding:10px;">전화번호</th>
+                                    <th style="padding:10px;">가입신청일</th>
+                                    <th style="padding:10px; text-align: center;">상태</th>
+                                    <th style="padding:10px; text-align:center;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="master-approved-list">
+                                <!-- JS가 채움 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- ── 3. 탈퇴 및 삭제 회원 이력 (로그) ── -->
+                    <div style="margin-top: 24px; margin-bottom: 8px; font-weight: 700; font-size: 15px; color: #ef4444; text-align: left; display: flex; align-items: center; gap: 8px;">
+                        <span>📜 탈퇴 및 삭제 회원 이력 (로그)</span>
+                        <span id="deleted-count-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: bold;">0</span>
+                    </div>
+                    <div class="master-table-wrap" style="overflow-x:auto;">
+                        <table class="master-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--border-glass); color:var(--text-secondary);">
+                                    <th style="padding:10px; width: 60px; text-align: center;">No.</th>
+                                    <th style="padding:10px;">이름</th>
+                                    <th style="padding:10px;">소속 대학</th>
+                                    <th style="padding:10px;">소속 학과</th>
+                                    <th style="padding:10px;">이메일</th>
+                                    <th style="padding:10px;">전화번호</th>
+                                    <th style="padding:10px;">탈퇴/삭제일</th>
+                                    <th style="padding:10px; text-align: center;">상태</th>
+                                    <th style="padding:10px; text-align:center;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="master-deleted-list">
+                                <!-- JS가 채움 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn-back" id="master-back-home" style="margin-top:24px;">← 처음으로</button>
+                </div>
+            </div>
+
+            <!-- ── 교수 마법사 컨테이너 (인증 통과 시 노출) ── -->
+            <div class="wizard-container" id="admin-wizard-container" style="display:none; width:100%;">
+                
+                <div class="wizard-logout-row" style="display:flex; justify-content:flex-end; gap:8px; width:100%; margin-bottom:12px;">
+                    <button class="btn-reset-pw" id="admin-info-mgmt-btn" style="padding:6px 12px; font-size:12px;">👤 개인정보 수정</button>
+                    <button class="btn-logout" id="admin-logout-btn" style="padding:6px 12px; font-size:12px; opacity:0.8;">로그 아웃</button>
+                </div>
+
+                <!-- Step Indicator -->
+                <div class="wizard-steps" id="wizard-steps">
+                    <div class="wizard-step active" data-step="1">
+                        <div class="step-circle">1</div>
+                        <span class="step-label">교수정보</span>
+                    </div>
+                    <div class="step-connector"></div>
+                    <div class="wizard-step" data-step="2">
+                        <div class="step-circle">2</div>
+                        <span class="step-label">과목정보</span>
+                    </div>
+                    <div class="step-connector"></div>
+                    <div class="wizard-step" data-step="3">
+                        <div class="step-circle">3</div>
+                        <span class="step-label">평가기준</span>
+                    </div>
+                </div>
+
+                <!-- ── Step 1: 교수 인적사항 ── -->
+                <div class="wizard-panel" id="wizard-step-1">
+                    <div class="wizard-card">
+                        <div class="wizard-card-title">📚 과목 선택</div>
+                        <div class="wizard-card-subtitle">등록된 과목을 편집하거나 새 과목을 추가합니다</div>
+
+                        <!-- 📂 기존 등록 과목 목록 UI -->
+                        <div class="course-list-box" id="course-list-box" style="margin-bottom: 20px;">
+                            <div class="course-filter-wrapper">
+                                <span class="course-filter-label">등록 과목</span>
+                                <select id="filter-semester" class="course-filter-select">
+                                    <option value="">전체 학기</option>
+                                    <!-- JS에서 동적으로 학기 옵션 채움 -->
+                                </select>
+                            </div>
+                            <div id="course-list-ul" class="course-list-ul-container">
+                                <!-- JS에서 동적으로 과목 목록 채움 -->
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px; margin-bottom: 20px;">
+                            <button class="btn-next" id="btn-create-new-course" style="width:100%;background:rgba(99, 102, 241, 0.15);border:1px solid rgba(99, 102, 241, 0.3);color:#c7d2fe;padding:12px;">
+                                <span class="wizard-btn-icon" aria-hidden="true">➕</span>
+                                <span class="wizard-btn-text">새 과목 등록</span>
+                            </button>
+                        </div>
+
+                        <!-- 기존 개인정보 및 이전 불러오기 폼 (오류 방지를 위해 숨김 유지) -->
+                        <div id="legacy-step1-fields" style="display: none;">
+                            <!-- 불러오기 섹션 -->
+                        <div class="load-config-box" id="load-config-box">
+                            <div class="load-config-header">
+                                <span>📂 이전 설정 불러오기</span>
+                                <button class="btn-load-toggle" id="btn-load-toggle">불러오기 ▾</button>
+                            </div>
+                            <div class="load-config-form" id="load-config-form" style="display:none;">
+                                <div class="wizard-form-row">
+                                    <div class="wizard-form-group" style="margin-bottom:8px;">
+                                        <label for="load-name">교수자 이름</label>
+                                        <input type="text" id="load-name" placeholder="이름 입력">
+                                    </div>
+                                    <div class="wizard-form-group" style="margin-bottom:8px;">
+                                        <label for="load-phone4">전화번호 뒷자리 4자리</label>
+                                        <input type="password" id="load-phone4" placeholder="뒷자리 4자리" maxlength="4" inputmode="numeric">
+                                    </div>
+                                </div>
+                                <button class="btn-next" id="btn-load-config" style="width:100%;margin-top:4px;">불러오기 →</button>
+                                <div id="load-error" class="error-message" style="margin-top:8px;"></div>
+                            </div>
+                        </div>
+
+                        <div class="wizard-form-group">
+                            <label for="prof-name">이름 <span style="color:#f87171;">*</span></label>
+                            <input type="text" id="prof-name" placeholder="홍길동" required>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="prof-email">이메일 <span style="color:#f87171;">*</span></label>
+                            <input type="email" id="prof-email" placeholder="professor@university.ac.kr" required>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="prof-phone">전화번호 <span style="color:#f87171;">*</span></label>
+                            <input type="tel" id="prof-phone" placeholder="010-1234-5678">
+                        </div>
+                        <button class="btn-next" id="wizard-next-1" style="display:none;">
+                            <span class="wizard-btn-text">다음</span>
+                            <span class="wizard-btn-icon" aria-hidden="true">→</span>
+                        </button>
+                        </div>
+                        <div class="wizard-nav">
+                            <button class="btn-back" id="wizard-back-home">
+                                <span class="wizard-btn-icon" aria-hidden="true">←</span>
+                                <span class="wizard-btn-text">처음으로</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Step 2: 과목 정보 ── -->
+                <div class="wizard-panel" id="wizard-step-2" style="display:none;">
+                    <div class="wizard-card">
+                        <div class="wizard-card-title">📚 과목 정보</div>
+                        <div class="wizard-card-subtitle">성적을 관리할 과목 정보를 입력합니다</div>
+
+                        <div class="wizard-form-row">
+                            <div class="wizard-form-group">
+                                <label for="course-year">년도 <span style="color:#f87171;">*</span></label>
+                                <select id="course-year" class="select-unselected">
+                                    <option value="">선택</option>
+                                </select>
+                            </div>
+                            <div class="wizard-form-group">
+                                <label for="course-semester">학기 <span style="color:#f87171;">*</span></label>
+                                <select id="course-semester" class="select-unselected">
+                                    <option value="">선택</option>
+                                    <option value="1학기">1학기</option>
+                                    <option value="2학기">2학기</option>
+                                    <option value="여름계절">여름계절</option>
+                                    <option value="겨울계절">겨울계절</option>
+                                    <option value="__custom__">기타 (직접입력)</option>
+                                </select>
+                                <input type="text" id="course-semester-custom" class="custom-input" placeholder="학기명을 입력하세요">
+                            </div>
+                        </div>
+                        <div class="wizard-form-group">
+                            <label for="course-name">과목명 <span style="color:#f87171;">*</span></label>
+                            <input type="text" id="course-name" placeholder="경영정보시스템(MIS)" autocomplete="off">
+                        </div>
+
+                        <div class="wizard-nav">
+                            <button class="btn-back" id="wizard-back-2">
+                                <span class="wizard-btn-icon" aria-hidden="true">←</span>
+                                <span class="wizard-btn-text">이전 (과목선택)</span>
+                            </button>
+                            <div class="wizard-nav-actions">
+                                <div id="wizard-save-2-container" class="wizard-save-block" style="display:none;">
+                                    <button class="btn-next btn-save" id="wizard-save-2">
+                                        <span class="wizard-btn-icon" aria-hidden="true">💾</span>
+                                        <span class="wizard-btn-text">저장</span>
+                                    </button>
+                                    <div class="wizard-save-info">
+                                        ※ 저장시 다음접속시 불러오기로 복원
+                                    </div>
+                                </div>
+                                <button class="btn-next" id="wizard-next-2">
+                                    <span class="wizard-btn-text">다음 (평가기준)</span>
+                                    <span class="wizard-btn-icon" aria-hidden="true">→</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Step 3: 평가 기준 ── -->
+                <div class="wizard-panel" id="wizard-step-3" style="display:none;">
+                    <div class="wizard-card">
+                        <div class="wizard-card-title">📊 평가 기준</div>
+                        <div class="wizard-card-subtitle">평가 항목을 선택하고 비율을 설정합니다 (합계 100%)</div>
+
+                        <div class="eval-criteria-list" id="eval-criteria-list">
+                            <!-- JS가 동적으로 채움 -->
+                        </div>
+
+                        <div class="eval-total">
+                            <div class="eval-total-header">
+                                <span class="eval-total-label">비율 합계</span>
+                                <span class="eval-total-value" id="eval-total-value">0%</span>
+                            </div>
+                            <div class="eval-total-bar">
+                                <div class="eval-total-fill" id="eval-total-fill" style="width:0%"></div>
+                            </div>
+                            <div class="eval-warning" id="eval-warning">⚠️ 비율의 합이 100%가 되어야 합니다</div>
+                        </div>
+
+                        <div class="wizard-nav">
+                            <button class="btn-back" id="wizard-back-3">
+                                <span class="wizard-btn-icon" aria-hidden="true">←</span>
+                                <span class="wizard-btn-text">이전 (과목정보)</span>
+                            </button>
+                            <div class="wizard-nav-actions">
+                                <button class="btn-next" id="wizard-add-course" style="display:none;" disabled>
+                                    <span class="wizard-btn-icon" aria-hidden="true">➕</span>
+                                    <span class="wizard-btn-text">다른 과목 추가</span>
+                                </button>
+                                <button class="btn-next" id="wizard-next-3" disabled>
+                                    <span class="wizard-btn-text">다음 (성적입력)</span>
+                                    <span class="wizard-btn-icon" aria-hidden="true">→</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── 설정 완료 ── -->
+                <div class="wizard-panel" id="wizard-step-complete" style="display:none;">
+                    <div class="wizard-card">
+                        <div class="complete-section">
+                            <div class="complete-icon">🎉</div>
+                            <div class="complete-title">설정이 완료되었습니다</div>
+                            <div class="complete-subtitle">과목을 선택한 후, 샘플 Excel 다운로드 또는 성적 업로드를 진행하세요</div>
+
+                            <!-- 과목 선택기 -->
+                            <div class="course-selector" id="course-selector">
+                                <label for="select-course" style="font-weight:600;color:var(--text-main);">📚 과목 선택</label>
+                                <select id="select-course" class="wizard-select">
+                                    <!-- JS가 동적으로 채움 -->
+                                </select>
+                            </div>
+
+                            <!-- 수강생 열람율 통계 위젯 -->
+                            <div id="course-view-stats-widget" class="stats-widget-card" style="display:none; margin: 16px 0; padding: 12px 16px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-md); text-align: left;">
+                                <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: #38bdf8; margin-bottom: 6px;">
+                                    <span>📊 수강생 성적 열람 현황</span>
+                                </div>
+                                <div id="course-view-stats-text" style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+                                    불러오는 중...
+                                </div>
+                                <div class="progress-bar" style="margin-top: 8px; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                                    <div id="course-view-stats-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); transition: width 0.5s ease-out;"></div>
+                                </div>
+                            </div>
+
+                            <div class="complete-summary" id="complete-summary"></div>
+
+                            <button class="btn-download" id="btn-download-excel">
+                                📥 샘플 Excel 다운로드
+                            </button>
+
+                            <!-- 업로드 영역 -->
+                            <div class="upload-area" id="upload-area">
+                                <div class="upload-box" id="upload-box">
+                                    <div class="upload-icon">📤</div>
+                                    <div class="upload-text">성적이 포함된 Excel 파일을<br>여기에 드래그하거나 클릭하세요</div>
+                                    <div class="upload-hint">.xlsx 파일 · 성적산출 근거 포함 파일 모두 가능</div>
+                                    <input type="file" id="upload-input" accept=".xlsx,.xls" style="display:none;">
+                                </div>
+                                <div id="upload-status" style="display:none;"></div>
+                                <!-- 검증 보고서 -->
+                                <div id="upload-validation" style="display:none;"></div>
+
+                                <!-- 파이프라인 -->
+                                <div id="pipeline-area" style="display:none;">
+                                    <div class="pipeline-steps" id="pipeline-steps">
+                                        <!-- 비표준: 4단계 / 표준: 2단계 (JS에서 동적 구성) -->
+                                    </div>
+                                    <div class="pipeline-filename" id="converted-filename"></div>
+                                    <!-- 미리보기 테이블 -->
+                                    <div id="preview-toolbar" class="preview-toolbar" style="display:none;">
+                                        <button class="btn-preview-toggle" id="btn-preview-toggle">👁 미리보기 접기 ▴</button>
+                                        <span class="preview-count" id="preview-count"></span>
+                                    </div>
+                                    <div id="upload-preview-table" class="preview-table-wrap" style="display:none;"></div>
+                                </div>
+
+
+
+                                <!-- 공시 설정 -->
+                                <div id="publish-area" style="display:none;">
+                                    <div class="publish-card">
+                                        <div class="publish-title">📢 성적 공시 설정</div>
+                                        <div class="publish-status" id="publish-status"></div>
+                                        <div class="publish-form">
+                                            <div class="publish-fields-row">
+                                                <div class="publish-field">
+                                                <label for="publish-start-datetime">공시 시작 일시</label>
+                                                <input type="datetime-local" id="publish-start-datetime" class="publish-input">
+                                            </div>
+                                            <div class="publish-field">
+                                                <label for="publish-end-datetime">공시 종료 일시</label>
+                                                <input type="datetime-local" id="publish-end-datetime" class="publish-input">
+                                            </div>
+                                        </div>
+                                            <div class="publish-actions">
+                                                <button class="pipe-btn active" id="btn-publish" style="padding:10px 24px;">📢 공시하기</button>
+                                                <button class="pipe-btn" id="btn-unpublish" style="padding:10px 24px;opacity:0.6;cursor:pointer;">🚫 공시 취소</button>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <br>
+                            <button class="btn-home" id="btn-go-home">← 처음으로 돌아가기</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+    <!-- App Scripts -->
+    <script src="static/app.js"></script>
+    <script src="static/admin.js"></script>
+</body>
+</html>
