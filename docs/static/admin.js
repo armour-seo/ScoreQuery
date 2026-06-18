@@ -2659,7 +2659,7 @@
             const masterPwHashed = await sha256('armour1234');
             const defaultUsers = [
                 {
-                    name: '아모르',
+                    name: '서창갑',
                     univ: '동명대학교',
                     dept: '경영학과',
                     email: 'armour@tu.ac.kr',
@@ -2671,6 +2671,23 @@
                 }
             ];
             localStorage.setItem('scorequery_users', JSON.stringify(defaultUsers));
+        } else {
+            // 기존 데이터의 마스터 이름이 '아모르'인 경우 '서창갑'으로 현행화
+            try {
+                let parsed = JSON.parse(users);
+                let updated = false;
+                parsed.forEach(u => {
+                    if ((u.isMaster || u.email === 'armour@tu.ac.kr') && u.name === '아모르') {
+                        u.name = '서창갑';
+                        updated = true;
+                    }
+                });
+                if (updated) {
+                    localStorage.setItem('scorequery_users', JSON.stringify(parsed));
+                }
+            } catch (e) {
+                console.error('Failed to parse users for update:', e);
+            }
         }
     }
 
@@ -3256,7 +3273,7 @@
             `이제 아래의 시스템 주소로 접속하신 뒤, 등록하신 교수 이메일(${targetUser.email})과 설정하신 비밀번호로 로그인하여 시스템에 진입하실 수 있습니다.\n\n` +
             `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
             `감사합니다.\n` +
-            `마스터 서창갑(아모르) 드림\n`;
+            `마스터 서창갑 드림\n`;
 
         sendMail(to, subjectText, bodyText);
     }
@@ -3290,7 +3307,7 @@
             `아래의 시스템 주소로 접속하신 후, 임시 비밀번호로 로그인하여 안전한 비밀번호로 변경하여 사용해 주시기 바랍니다.\n\n` +
             `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
             `감사합니다.\n` +
-            `마스터 아모르 드림\n`;
+            `마스터 서창갑 드림\n`;
 
         sendMail(to, subjectText, bodyText);
     }
