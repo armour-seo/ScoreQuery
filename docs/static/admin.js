@@ -2691,6 +2691,64 @@
         }
     }
 
+    // ── 구글 앱스 스크립트(GAS) 원격 DB 연동 헬퍼 함수 ──
+    async function callGasApi(action, payload, auth) {
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (!gasUrl) {
+            console.warn('[ScoreQuery] GAS URL is not configured. Falling back to local offline mode.');
+            return null;
+        }
+
+        try {
+            const res = await fetch(gasUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain' // CORS preflight 방지를 위해 단순 요청 타입 사용
+                },
+                body: JSON.stringify({
+                    action: action,
+                    payload: payload,
+                    auth: auth
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+
+            const data = await res.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown GAS error');
+            }
+            return data.data;
+        } catch (e) {
+            console.error(`[ScoreQuery] GAS API Error (${action}):`, e);
+            throw e;
+        }
+    }
+
+    async function syncUsersFromGas() {
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (!gasUrl) return;
+
+        // 마스터만 목록을 동기화할 수 있으며, 마스터 본인의 이메일/비밀번호 해시가 필요함
+        if (!currentUser || !currentUser.isMaster) return;
+
+        try {
+            const users = await callGasApi('get_users', null, {
+                email: currentUser.email,
+                pwHash: currentUser.pw
+            });
+            if (users && Array.isArray(users)) {
+                // 구글 시트에서 받은 데이터를 로컬에 덮어씌워 동기화
+                localStorage.setItem('scorequery_users', JSON.stringify(users));
+                console.log('[ScoreQuery] Successfully synchronized user database from Google Sheet.');
+            }
+        } catch (e) {
+            console.error('[ScoreQuery] Failed to sync users from GAS:', e);
+        }
+    }
+
     async function loadPublicConfig() {
         try {
             const res = await fetch('public-config.json?_t=' + Date.now());
@@ -2830,16 +2888,53 @@
         const errorEl = document.getElementById('admin-login-error');
         errorEl.style.display = 'none';
 
-        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
-        
-        // 입력 패스워드 SHA-256 해시화 대조
         const pwHashed = await sha256(pw);
-        const user = users.find(u => u.email === email && u.pw === pwHashed);
+        let user = null;
+        let loginError = null;
 
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                // GAS 데이터베이스에서 검증 및 최신 정보 동기화
+                const gasUser = await callGasApi('login', { email, pwHash: pwHashed });
+                if (gasUser) {
+                    // 로컬스토리지 동기화 및 병합
+                    const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+                    const idx = users.findIndex(u => u.email === email);
+                    const syncedUser = {
+                        name: gasUser.name,
+                        univ: gasUser.univ,
+                        dept: gasUser.dept,
+                        email: gasUser.email,
+                        pw: pwHashed, // 로그인 성공했으므로 로컬 저장용으로 해시 저장
+                        phone: gasUser.phone,
+                        status: gasUser.status,
+                        isMaster: gasUser.isMaster === true || gasUser.isMaster === 'true',
+                        regDate: gasUser.regDate
+                    };
+                    if (idx >= 0) {
+                        users[idx] = syncedUser;
+                    } else {
+                        users.push(syncedUser);
+                    }
+                    localStorage.setItem('scorequery_users', JSON.stringify(users));
+                    user = syncedUser;
+                }
+            } catch (err) {
+                console.warn('[ScoreQuery] GAS login check failed, using local fallback if available.', err);
+                loginError = err.message || '이메일 또는 비밀번호가 올바르지 않습니다.';
+            }
+        }
+
+        // GAS를 통한 검증이 실패했거나 오프라인일 때 로컬 스토리지 대조로 폴백
         if (!user) {
-            errorEl.textContent = '❌ 이메일 또는 비밀번호가 올바르지 않습니다.';
-            errorEl.style.display = 'block';
-            return;
+            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+            user = users.find(u => u.email === email && u.pw === pwHashed);
+            if (!user) {
+                errorEl.textContent = '❌ ' + (loginError || '이메일 또는 비밀번호가 올바르지 않습니다.');
+                errorEl.style.display = 'block';
+                return;
+            }
         }
 
         if (user.isMaster) {
@@ -2905,48 +3000,7 @@
             return;
         }
 
-        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
-        const existingUserByEmail = users.find(u => u.email === email);
-        const cleanPhone = phone.replace(/[^0-9]/g, '');
-        const existingUserByPhone = users.find(u => (u.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
-
-        // 1. 이메일 중복 체크 (사용 중인 계정)
-        if (existingUserByEmail && existingUserByEmail.status !== 'deleted') {
-            errorEl.textContent = '❌ 이미 등록되었거나 가입 대기 중인 이메일입니다.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        // 2. 휴대전화 중복 체크 (사용 중인 계정)
-        if (existingUserByPhone && existingUserByPhone.status !== 'deleted') {
-            errorEl.textContent = '❌ 이미 등록되었거나 가입 대기 중인 휴대전화 번호입니다.';
-            errorEl.style.display = 'block';
-            return;
-        }
-
-        // 비밀번호 해시화 암호화 보관
         const pwHashed = await sha256(pw);
-
-        // 3. 기존에 탈퇴/삭제된 계정(deleted)이 있을 때 갱신 (재가입 처리)
-        if (existingUserByEmail && existingUserByEmail.status === 'deleted') {
-            existingUserByEmail.name = name;
-            existingUserByEmail.univ = univ;
-            existingUserByEmail.dept = dept;
-            existingUserByEmail.pw = pwHashed;
-            existingUserByEmail.phone = phone;
-            existingUserByEmail.status = 'pending';
-            existingUserByEmail.regDate = new Date().toISOString();
-            if (existingUserByEmail.deletedDate) {
-                delete existingUserByEmail.deletedDate;
-            }
-            
-            localStorage.setItem('scorequery_users', JSON.stringify(users));
-            currentUser = existingUserByEmail;
-            showPendingView(existingUserByEmail);
-            return;
-        }
-
-        // 4. 신규 회원가입 등록
         const newUser = {
             name, univ, dept, email,
             pw: pwHashed,
@@ -2956,7 +3010,26 @@
             regDate: new Date().toISOString()
         };
 
-        users.push(newUser);
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                // GAS 데이터베이스에 가입 요청 전송
+                await callGasApi('register', newUser);
+            } catch (err) {
+                errorEl.textContent = '❌ 가입 신청에 실패했습니다: ' + (err.message || '네트워크 오류');
+                errorEl.style.display = 'block';
+                return;
+            }
+        }
+
+        // 로컬 스토리지 캐시 업데이트 및 재가입 처리
+        const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+        const existingUserIdx = users.findIndex(u => u.email === email);
+        if (existingUserIdx >= 0) {
+            users[existingUserIdx] = newUser;
+        } else {
+            users.push(newUser);
+        }
         localStorage.setItem('scorequery_users', JSON.stringify(users));
 
         currentUser = newUser;
@@ -3099,7 +3172,9 @@
             };
         }
 
-        renderMasterPendingList();
+        syncUsersFromGas().then(() => {
+            renderMasterPendingList();
+        });
     }
 
     function renderMasterPendingList() {
@@ -3254,28 +3329,46 @@
         });
     }
 
-    function handleApprove(email) {
+    async function handleApprove(email) {
         const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
         const idx = users.findIndex(u => u.email === email);
         if (idx < 0) return;
 
+        const targetUser = users[idx];
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('approve', { email: email }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+                alert(`✅ ${targetUser.name} 교수님의 회원가입이 승인되었습니다.`);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 승인 처리에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        } else {
+            // 로컬 오프라인 모드에서는 메일 클라이언트/모달 발송 연동
+            const to = targetUser.email;
+            const subjectText = '[ScoreQuery] 교수 회원가입 승인 완료 안내';
+            const bodyText = 
+                `${targetUser.name} 교수님 안녕하십니까,\n\n` +
+                `성적 조회 및 관리 시스템(ScoreQuery)의 교수 회원가입 신청이 성공적으로 승인 완료되었음을 알려드립니다.\n\n` +
+                `이제 아래의 시스템 주소로 접속하신 뒤, 등록하신 교수 이메일(${targetUser.email})과 설정하신 비밀번호로 로그인하여 시스템에 진입하실 수 있습니다.\n\n` +
+                `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
+                `감사합니다.\n` +
+                `마스터 서창갑 드림\n`;
+
+            sendMail(to, subjectText, bodyText);
+        }
+
         users[idx].status = 'approved';
         localStorage.setItem('scorequery_users', JSON.stringify(users));
-
-        const targetUser = users[idx];
         renderMasterPendingList();
-
-        const to = targetUser.email;
-        const subjectText = '[ScoreQuery] 교수 회원가입 승인 완료 안내';
-        const bodyText = 
-            `${targetUser.name} 교수님 안녕하십니까,\n\n` +
-            `성적 조회 및 관리 시스템(ScoreQuery)의 교수 회원가입 신청이 성공적으로 승인 완료되었음을 알려드립니다.\n\n` +
-            `이제 아래의 시스템 주소로 접속하신 뒤, 등록하신 교수 이메일(${targetUser.email})과 설정하신 비밀번호로 로그인하여 시스템에 진입하실 수 있습니다.\n\n` +
-            `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
-            `감사합니다.\n` +
-            `마스터 서창갑 드림\n`;
-
-        sendMail(to, subjectText, bodyText);
     }
 
     async function handleResetPassword(email) {
@@ -3293,56 +3386,123 @@
 
         // 비밀번호 해시화 저장
         const pwHashed = await sha256(tempPw);
+        
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('reset_pw', { email: email, tempPw: pwHashed }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+                alert(`✅ ${targetUser.name} 교수님의 비밀번호가 임시 비밀번호로 초기화되었습니다.\n\n임시 비밀번호: ${tempPw}\n\n(이 정보는 가입자에게 별도로 전달해 주세요.)`);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 비밀번호 초기화에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        } else {
+            // 로컬 오프라인 모드 메일 발송
+            const to = targetUser.email;
+            const subjectText = '[ScoreQuery] 교수자 계정 비밀번호 초기화 안내';
+            const bodyText = 
+                `${targetUser.name} 교수님 안녕하십니까,\n\n` +
+                `요청하신 ScoreQuery 교수자 계정의 비밀번호가 임시 비밀번호로 초기화되었습니다.\n\n` +
+                `- 이메일 ID: ${targetUser.email}\n` +
+                `- 임시 비밀번호: ${tempPw}\n\n` +
+                `아래의 시스템 주소로 접속하신 후, 임시 비밀번호로 로그인하여 안전한 비밀번호로 변경하여 사용해 주시기 바랍니다.\n\n` +
+                `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
+                `감사합니다.\n` +
+                `마스터 서창갑 드림\n`;
+
+            sendMail(to, subjectText, bodyText);
+        }
+
         users[idx].pw = pwHashed;
         localStorage.setItem('scorequery_users', JSON.stringify(users));
-
-        // 메일 클라이언트 및 모달 발송 연동
-        const to = targetUser.email;
-        const subjectText = '[ScoreQuery] 교수자 계정 비밀번호 초기화 안내';
-        const bodyText = 
-            `${targetUser.name} 교수님 안녕하십니까,\n\n` +
-            `요청하신 ScoreQuery 교수자 계정의 비밀번호가 임시 비밀번호로 초기화되었습니다.\n\n` +
-            `- 이메일 ID: ${targetUser.email}\n` +
-            `- 임시 비밀번호: ${tempPw}\n\n` +
-            `아래의 시스템 주소로 접속하신 후, 임시 비밀번호로 로그인하여 안전한 비밀번호로 변경하여 사용해 주시기 바랍니다.\n\n` +
-            `- 시스템 접속 주소: https://armour-seo.github.io/ScoreQuery/\n\n` +
-            `감사합니다.\n` +
-            `마스터 서창갑 드림\n`;
-
-        sendMail(to, subjectText, bodyText);
+        renderMasterPendingList();
     }
 
-    function handleReject(email) {
+    async function handleReject(email) {
         const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
         const idx = users.findIndex(u => u.email === email);
         if (idx < 0) return;
 
         if (!confirm('정말 본 신청을 반려 처리하시겠습니까?')) return;
 
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('reject', { email: email }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 반려 처리에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        }
+
         users[idx].status = 'rejected';
         localStorage.setItem('scorequery_users', JSON.stringify(users));
         renderMasterPendingList();
     }
 
-    function handleRejectApproved(email) {
+    async function handleRejectApproved(email) {
         const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
         const idx = users.findIndex(u => u.email === email);
         if (idx < 0) return;
 
         if (!confirm('⚠️ 정말 본 회원의 가입 승인을 취소하고 반려 상태로 전환하시겠습니까?\n이 회원은 로그인 권한을 즉시 상실하게 됩니다.')) return;
 
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('reject', { email: email }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 가입 취소 처리에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        }
+
         users[idx].status = 'rejected';
         localStorage.setItem('scorequery_users', JSON.stringify(users));
         renderMasterPendingList();
     }
 
-    function handleDeleteUserByMaster(email) {
+    async function handleDeleteUserByMaster(email) {
         const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
         const idx = users.findIndex(u => u.email === email);
         if (idx < 0) return;
 
         const targetUser = users[idx];
         if (!confirm(`⚠️ 정말로 ${targetUser.name} 교수님의 계정을 삭제하시겠습니까?\n계정 정보는 삭제 이력 로그(Soft Delete)에 영구 보존됩니다.`)) return;
+
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('delete', { email: email }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 계정 삭제 처리에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        }
 
         users[idx].status = 'deleted';
         users[idx].deletedDate = new Date().toISOString();
@@ -3351,13 +3511,29 @@
         alert(`🗑️ ${targetUser.name} 교수님의 계정이 성공적으로 삭제 처리되어 이력 로그에 기록되었습니다.`);
     }
 
-    function handleRestoreUserByMaster(email) {
+    async function handleRestoreUserByMaster(email) {
         const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
         const idx = users.findIndex(u => u.email === email);
         if (idx < 0) return;
 
         const targetUser = users[idx];
         if (!confirm(`ℹ️ ${targetUser.name} 교수님의 삭제된 계정을 가입 신청(대기) 상태로 복구하시겠습니까?`)) return;
+
+        const gasUrl = localStorage.getItem('scorequery_gas_url');
+        if (gasUrl) {
+            try {
+                showMailLoading(true);
+                await callGasApi('restore', { email: email }, {
+                    email: currentUser.email,
+                    pwHash: currentUser.pw
+                });
+                showMailLoading(false);
+            } catch (err) {
+                showMailLoading(false);
+                alert('⚠️ 원격 계정 복구 처리에 실패했습니다: ' + (err.message || '네트워크 오류'));
+                return;
+            }
+        }
 
         users[idx].status = 'pending';
         if (users[idx].deletedDate) {
