@@ -341,10 +341,10 @@
                     </div>
 
                     <button class="btn-download" id="btn-request-approval" style="width:100%; margin-top:12px; background:linear-gradient(135deg,#3b82f6,#8b5cf6);">
-                        📧 아모르교수님께 승인요청 메일 보내기
+                        📋 가입 정보 복사 & 승인 요청 (구글 폼)
                     </button>
                     <div class="pending-hint" style="font-size:11px; color:var(--text-muted); margin-top:8px;">
-                        위 버튼을 클릭하면 아모르 교수님께 승인요청 메일 발송 양식이 실행됩니다.
+                        위 버튼을 클릭하면 내 가입 신청 정보가 클립보드에 복사되고, 아모르 교수님의 승인 요청 구글 폼으로 이동합니다.
                     </div>
                     
                     <button class="btn-back" id="pending-back-login" style="width:100%; margin-top:24px; border-color:var(--border-glass);">← 로그인으로 돌아가기</button>
@@ -363,18 +363,17 @@
                     </div>
                     <div class="master-subtitle" style="font-size:13px; color:var(--text-secondary); margin-bottom:20px;">가입 신청 현황을 검토하고 승인 여부를 결정합니다.</div>
                     
-                    <!-- ── 자동 메일 발송 설정 (Google Apps Script) ── -->
+                    <!-- ── 승인 요청 구글 폼 설정 (Google Forms) ── -->
                     <div class="master-settings" style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); text-align: left;">
                         <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #38bdf8; display: flex; align-items: center; justify-content: space-between;">
-                            <span>⚙️ 자동 메일 발송 설정 (Google Apps Script)</span>
-                            <span id="gas-help-btn" style="cursor: pointer; font-size: 11px; color: #fbbf24; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); transition: all 0.2s; font-weight: 600;" title="설정 가이드 보기">❓ 가이드 보기</span>
+                            <span>⚙️ 승인 요청 구글 폼 설정 (Google Forms)</span>
                         </div>
                         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
-                            구글 앱스 스크립트를 웹 앱으로 배포한 후 아래에 URL을 입력하면 메일이 백그라운드에서 자동으로 발송됩니다.<br>
-                            (설정하지 않거나 비워두면 기존처럼 수동 발송을 위한 Mail Sandbox 모달이 제공됩니다.)
+                            신규 교수 가입 시 승인 요청을 접수받을 구글 설문지(Google Forms) URL을 등록합니다.<br>
+                            (신청자가 승인요청 버튼을 누르면 본인 신청 정보가 복사되고 이 설문지로 바로 연결됩니다.)
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
+                            <input type="text" id="gas-url-input" placeholder="https://docs.google.com/forms/d/e/.../viewform" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 12px; outline: none;">
                             <button id="save-gas-url-btn" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">저장</button>
                             <button id="load-gas-url-btn" style="background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-glass); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" title="로컬 저장소에서 설정된 URL 불러오기">URL 가져오기</button>
                         </div>

@@ -2967,22 +2967,31 @@
     }
 
     function sendApprovalRequestMail(user) {
-        const to = 'armour@tu.ac.kr';
-        const subjectText = `[ScoreQuery] 교수자 회원가입 승인 요청 - ${user.name} 교수`;
-        const bodyText = 
-            `아모르 마스터(서창갑 교수님) 귀하,\n\n` +
-            `아래 교수님의 ScoreQuery 성적조회시스템 회원가입 승인을 정중히 요청드립니다.\n\n` +
-            `[가입 신청 정보]\n` +
+        // 1. 가입 신청 정보 텍스트 생성
+        const infoText = 
+            `[ScoreQuery 가입 신청 정보]\n` +
             `- 신청자 성명: ${user.name}\n` +
             `- 소속 대학교: ${user.univ || '-'}\n` +
             `- 소속 학과: ${user.dept}\n` +
             `- 이메일 주소: ${user.email}\n` +
             `- 휴대전화 번호: ${user.phone}\n` +
-            `- 신청 일시: ${new Date(user.regDate).toLocaleString()}\n\n` +
-            `내용을 검토하신 후 아래 마스터 대시보드에 접속하여 가입 승인을 처리해 주시면 대단히 감사하겠습니다.\n\n` +
-            `- 마스터 대시보드 주소: https://armour-seo.github.io/ScoreQuery/`;
+            `- 신청 일시: ${new Date(user.regDate).toLocaleString()}`;
 
-        sendMail(to, subjectText, bodyText);
+        // 2. 클립보드 복사 시도
+        navigator.clipboard.writeText(infoText).then(() => {
+            alert('📋 가입 신청 정보가 클립보드에 복사되었습니다!\n\n확인을 누르면 마스터(서창갑 교수님)의 승인 요청 구글 폼으로 이동합니다.\n폼 입력란에 복사한 정보를 붙여넣어(Ctrl+V) 신청을 완료해 주세요.');
+            
+            // 3. 구글 폼 URL로 이동
+            const googleFormUrl = localStorage.getItem('scorequery_gas_url') || 'https://forms.google.com';
+            window.open(googleFormUrl, '_blank');
+        }).catch(err => {
+            console.error('Clipboard copy failed:', err);
+            alert('가입 신청 정보를 복사하지 못했습니다. 수동 메일 발송 화면을 실행합니다.');
+            // 실패 시 기존 메일 클라이언트 및 모달 폴백
+            const to = 'armour@tu.ac.kr';
+            const subjectText = `[ScoreQuery] 교수자 회원가입 승인 요청 - ${user.name} 교수`;
+            sendMail(to, subjectText, infoText);
+        });
     }
 
     function showMasterDashboard() {
@@ -3008,7 +3017,7 @@
                     const url = gasInput.value.trim();
                     localStorage.setItem('scorequery_gas_url', url);
                     autoSavePublicConfigToServer(url);
-                    alert(url ? '✅ 자동 메일 발송 URL이 저장되었습니다.' : 'ℹ️ 자동 메일 발송 URL이 삭제되었습니다. 이제 메일은 수동 발송됩니다.');
+                    alert(url ? '✅ 승인 요청 구글 폼 URL이 저장되었습니다.' : 'ℹ️ 승인 요청 구글 폼 URL이 삭제되었습니다.');
                 };
             }
             if (loadGasBtn) {
@@ -3016,9 +3025,9 @@
                     const loadedUrl = await syncGasUrlFromServer();
                     if (loadedUrl) {
                         gasInput.value = loadedUrl;
-                        alert('✅ 로컬 저장소에서 자동 메일 발송 URL을 성공적으로 가져왔습니다.');
+                        alert('✅ 로컬 저장소에서 승인 요청 구글 폼 URL을 성공적으로 가져왔습니다.');
                     } else {
-                        alert('ℹ️ 로컬 저장소에 설정된 자동 메일 발송 URL이 없습니다.');
+                        alert('ℹ️ 로컬 저장소에 설정된 승인 요청 구글 폼 URL이 없습니다.');
                     }
                 };
             }
