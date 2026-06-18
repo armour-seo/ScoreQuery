@@ -521,10 +521,30 @@
                 <!-- ── Step 1: 교수 인적사항 ── -->
                 <div class="wizard-panel" id="wizard-step-1">
                     <div class="wizard-card">
-                        <div class="wizard-card-title">👤 교수 인적사항</div>
-                        <div class="wizard-card-subtitle">성적표에 표시될 교수 정보를 입력합니다</div>
+                        <div class="wizard-card-title">📚 이전 설정 불러오기</div>
+                        <div class="wizard-card-subtitle">기존에 등록된 과목 목록 중 하나를 선택하거나 새 과목을 등록합니다</div>
 
-                        <!-- 불러오기 섹션 -->
+                        <!-- 📂 기존 등록 과목 목록 UI -->
+                        <div class="course-list-box" id="course-list-box" style="margin-bottom: 20px;">
+                            <div class="course-filter-wrapper">
+                                <span class="course-filter-label">📂 등록된 과목 목록</span>
+                                <select id="filter-semester" class="course-filter-select">
+                                    <option value="">전체 학기</option>
+                                    <!-- JS에서 동적으로 학기 옵션 채움 -->
+                                </select>
+                            </div>
+                            <div id="course-list-ul" class="course-list-ul-container">
+                                <!-- JS에서 동적으로 과목 목록 채움 -->
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px; margin-bottom: 20px;">
+                            <button class="btn-next" id="btn-create-new-course" style="width:100%;background:rgba(99, 102, 241, 0.15);border:1px solid rgba(99, 102, 241, 0.3);color:#c7d2fe;padding:12px;">➕ 새 과목 등록하기</button>
+                        </div>
+
+                        <!-- 기존 개인정보 및 이전 불러오기 폼 (오류 방지를 위해 숨김 유지) -->
+                        <div id="legacy-step1-fields" style="display: none;">
+                            <!-- 불러오기 섹션 -->
                         <div class="load-config-box" id="load-config-box">
                             <div class="load-config-header">
                                 <span>📂 이전 설정 불러오기</span>
@@ -558,10 +578,10 @@
                             <label for="prof-phone">전화번호 <span style="color:#f87171;">*</span></label>
                             <input type="tel" id="prof-phone" placeholder="010-1234-5678">
                         </div>
-
+                        <button class="btn-next" id="wizard-next-1" style="display:none;">다음 →</button>
+                        </div>
                         <div class="wizard-nav">
                             <button class="btn-back" id="wizard-back-home">← 처음으로</button>
-                            <button class="btn-next" id="wizard-next-1">다음 →</button>
                         </div>
                     </div>
                 </div>
@@ -594,17 +614,21 @@
                         </div>
                         <div class="wizard-form-group">
                             <label for="course-name">과목명 <span style="color:#f87171;">*</span></label>
-                            <input type="text" id="course-name" placeholder="경영정보시스템(MIS)" list="course-name-list" autocomplete="off">
-                            <datalist id="course-name-list">
-                                <!-- JS가 기존 과목명으로 채움 -->
-                            </datalist>
+                            <input type="text" id="course-name" placeholder="경영정보시스템(MIS)" autocomplete="off">
                         </div>
 
                         <div class="wizard-nav">
-                            <button class="btn-back" id="wizard-back-2">← 이전</button>
-                            <div style="display:flex;gap:8px;">
-                                <button class="btn-next" id="wizard-save-2" style="background:linear-gradient(135deg,#f59e0b,#d97706);">💾 저장</button>
-                                <button class="btn-next" id="wizard-next-2">다음 →</button>
+                            <button class="btn-back" id="wizard-back-2">← 이전 (과목선택)</button>
+                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <div id="wizard-save-2-container" style="display:none;text-align:right;">
+                                        <button class="btn-next" id="wizard-save-2" style="background:linear-gradient(135deg,#f59e0b,#d97706);margin-bottom:4px;">💾 저장</button>
+                                        <div class="wizard-save-info" style="font-size:0.7rem;color:var(--text-muted);">
+                                            ※ 임시저장 시 현재 설정이 로컬 저장소에 안전하게 백업됩니다
+                                        </div>
+                                    </div>
+                                    <button class="btn-next" id="wizard-next-2">다음 (평가기준) →</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -632,10 +656,10 @@
                         </div>
 
                         <div class="wizard-nav">
-                            <button class="btn-back" id="wizard-back-3">← 이전</button>
+                            <button class="btn-back" id="wizard-back-3">← 이전 (과목정보)</button>
                             <div style="display:flex;gap:8px;">
-                                <button class="btn-next" id="wizard-add-course" style="background:linear-gradient(135deg,#f59e0b,#d97706);" disabled>➕ 다른 과목 추가</button>
-                                <button class="btn-next" id="wizard-next-3" disabled>설정 완료 ✓</button>
+                                <button class="btn-next" id="wizard-add-course" style="display:none;" disabled>➕ 다른 과목 추가</button>
+                                <button class="btn-next" id="wizard-next-3" disabled>다음 (성적입력) →</button>
                             </div>
                         </div>
                     </div>
@@ -710,10 +734,16 @@
                                         <div class="publish-title">📢 성적 공시 설정</div>
                                         <div class="publish-status" id="publish-status"></div>
                                         <div class="publish-form">
-                                            <div class="publish-field">
-                                                <label for="publish-datetime">공시 일시</label>
-                                                <input type="datetime-local" id="publish-datetime" class="publish-input">
+                                            <div class="publish-fields-row">
+                                                <div class="publish-field">
+                                                <label for="publish-start-datetime">공시 시작 일시</label>
+                                                <input type="datetime-local" id="publish-start-datetime" class="publish-input">
                                             </div>
+                                            <div class="publish-field">
+                                                <label for="publish-end-datetime">공시 종료 일시</label>
+                                                <input type="datetime-local" id="publish-end-datetime" class="publish-input">
+                                            </div>
+                                        </div>
                                             <div class="publish-actions">
                                                 <button class="pipe-btn active" id="btn-publish" style="padding:10px 24px;">📢 공시하기</button>
                                                 <button class="pipe-btn" id="btn-unpublish" style="padding:10px 24px;opacity:0.6;cursor:pointer;">🚫 공시 취소</button>

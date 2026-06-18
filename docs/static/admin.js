@@ -162,9 +162,14 @@
             }
         }
 
-        // Step 2 = 과목명 자동완성 목록 채우기
+        // Step 2 = 과목명 자동완성 목록 채우기 및 배경/저장버튼 관리
         if (step === 2) {
             populateCourseNameList();
+            const ySelect = document.getElementById('course-year');
+            const sSelect = document.getElementById('course-semester');
+            if (ySelect) ySelect.classList.toggle('select-unselected', !ySelect.value);
+            if (sSelect) sSelect.classList.toggle('select-unselected', !sSelect.value);
+            checkStep2SaveButtonVisibility();
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -222,6 +227,14 @@
         const semester = semSelect === '__custom__' ? semCustom : semSelect;
         adminConfig.course = { year, semester, name: courseName };
         return true;
+    }
+
+    function checkStep2SaveButtonVisibility() {
+        const courseName = document.getElementById('course-name').value.trim();
+        const saveContainer = document.getElementById('wizard-save-2-container');
+        if (saveContainer) {
+            saveContainer.style.display = courseName ? 'block' : 'none';
+        }
     }
 
     function validateStep3() {
@@ -531,16 +544,23 @@
         area.style.display = '';
 
         const info = getPublishInfo();
-        const dtInput = document.getElementById('publish-datetime');
+        const startInput = document.getElementById('publish-start-datetime');
+        const endInput = document.getElementById('publish-end-datetime');
 
         if (info && info.published) {
-            dtInput.value = info.publishDate || '';
+            startInput.value = info.publishStartDate || info.publishDate || '';
+            endInput.value = info.publishEndDate || '';
             updatePublishStatusDisplay(info);
         } else {
-            // 기본값: 현재 시각 + 1시간 (반올림)
+            // 기본값: 시작일시는 현재 시각 + 1시간 (반올림), 종료일시는 시작일시 + 7일
             const now = new Date();
             now.setHours(now.getHours() + 1, 0, 0, 0);
-            dtInput.value = toLocalISOString(now);
+            startInput.value = toLocalISOString(now);
+
+            const end = new Date(now);
+            end.setDate(end.getDate() + 7);
+            endInput.value = toLocalISOString(end);
+
             updatePublishStatusDisplay(null);
         }
     }
@@ -555,16 +575,22 @@
         if (!statusEl) return;
 
         if (info && info.published) {
-            const dt = new Date(info.publishDate);
+            const startDt = new Date(info.publishStartDate || info.publishDate);
+            const endDt = info.publishEndDate ? new Date(info.publishEndDate) : null;
             const now = new Date();
-            const dateStr = dt.toLocaleString('ko-KR', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' });
 
-            if (now >= dt) {
+            const startStr = startDt.toLocaleString('ko-KR', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' });
+            const endStr = endDt ? endDt.toLocaleString('ko-KR', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '종료일 미지정';
+
+            if (now >= startDt && (!endDt || now <= endDt)) {
                 statusEl.className = 'publish-status published';
-                statusEl.textContent = `✅ 공시 중 — ${dateStr}부터 학생 조회 가능`;
-            } else {
+                statusEl.textContent = `✅ 공시 중 — ${startStr} ~ ${endStr} 동안 학생 조회 가능`;
+            } else if (now < startDt) {
                 statusEl.className = 'publish-status';
-                statusEl.textContent = `⏳ 공시 예약 — ${dateStr}에 공개 예정`;
+                statusEl.textContent = `⏳ 공시 예약 — ${startStr}부터 조회 시작 예정 (종료: ${endStr})`;
+            } else {
+                statusEl.className = 'publish-status expired';
+                statusEl.textContent = `🔒 공시 종료 — 조회 기간이 만료되었습니다 (${endStr} 종료됨)`;
             }
             document.getElementById('btn-unpublish').style.opacity = '1';
         } else {
@@ -575,17 +601,30 @@
     }
 
     function publishGrades() {
-        const dtInput = document.getElementById('publish-datetime');
-        const publishDate = dtInput.value;
+        const startInput = document.getElementById('publish-start-datetime');
+        const endInput = document.getElementById('publish-end-datetime');
+        const publishStartDate = startInput.value;
+        const publishEndDate = endInput.value;
 
-        if (!publishDate) {
-            alert('공시 일시를 선택해 주세요.');
+        if (!publishStartDate) {
+            alert('공시 시작 일시를 선택해 주세요.');
+            return;
+        }
+        if (!publishEndDate) {
+            alert('공시 종료 일시를 선택해 주세요.');
+            return;
+        }
+
+        if (new Date(publishStartDate) >= new Date(publishEndDate)) {
+            alert('공시 종료 일시는 시작 일시보다 늦어야 합니다.');
             return;
         }
 
         const info = {
             published: true,
-            publishDate: publishDate,
+            publishStartDate: publishStartDate,
+            publishEndDate: publishEndDate,
+            publishDate: publishStartDate, // 하위 호환용
             publishedAt: new Date().toISOString(),
             courseName: adminConfig.course.name,
         };
@@ -601,7 +640,9 @@
             c.name === adminConfig.course.name
         );
         if (idx >= 0) {
-            courseList[idx].publishDate = publishDate;
+            courseList[idx].publishStartDate = publishStartDate;
+            courseList[idx].publishEndDate = publishEndDate;
+            courseList[idx].publishDate = publishStartDate;
             courseList[idx].published = true;
             if (currentUser) {
                 courseList[idx].professor = { name: currentUser.name, email: currentUser.email };
@@ -612,7 +653,9 @@
                 year: adminConfig.course.year,
                 semester: adminConfig.course.semester,
                 name: adminConfig.course.name,
-                publishDate: publishDate,
+                publishStartDate: publishStartDate,
+                publishEndDate: publishEndDate,
+                publishDate: publishStartDate,
                 published: true,
                 professor: currentUser ? { name: currentUser.name, email: currentUser.email } : null
             });
@@ -641,6 +684,12 @@
 
         localStorage.removeItem(getPublishKey());
 
+        // 입력 폼 필드 초기화
+        const startInput = document.getElementById('publish-start-datetime');
+        const endInput = document.getElementById('publish-end-datetime');
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+
         // 과목 목록에서도 제거
         const courseListRaw = localStorage.getItem('scorequery_courses') || '[]';
         const courseList = JSON.parse(courseListRaw);
@@ -650,13 +699,22 @@
             c.name === adminConfig.course.name
         );
         if (idx >= 0) {
+            delete courseList[idx].publishStartDate;
+            delete courseList[idx].publishEndDate;
             delete courseList[idx].publishDate;
             delete courseList[idx].published;
             localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
         }
 
         updatePublishStatusDisplay(null);
-        alert('🚫 공시가 취소되었습니다.');
+        
+        autoSaveDataJsonToServer().then(res => {
+            if (res && res.success) {
+                alert('🚫 공시가 취소되었으며, 서버의 docs/data.json 파일로 자동 저장되었습니다.');
+            } else {
+                alert('🚫 공시가 취소되었습니다.\n(로컬 백엔드 서버가 종료 상태이거나 연결할 수 없어 data.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 수동 저장해 주세요.)');
+            }
+        });
     }
 
     function loadExistingPublishStatus() {
@@ -736,6 +794,16 @@
                     name: currentUser.name,
                     email: currentUser.email
                 };
+            }
+            // 공시 정보도 data.json에 반영
+            const pubInfo = getPublishInfo();
+            if (pubInfo && pubInfo.published) {
+                dataObj.course.published = true;
+                dataObj.course.publishStartDate = pubInfo.publishStartDate || pubInfo.publishDate;
+                dataObj.course.publishEndDate = pubInfo.publishEndDate || '';
+                dataObj.course.publishDate = pubInfo.publishDate; // 하위 호환
+            } else {
+                dataObj.course.published = false;
             }
             return dataObj;
         } catch (e) {
@@ -1908,8 +1976,38 @@
             e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
         });
 
-        // Semester custom toggle
-        document.getElementById('course-semester').addEventListener('change', toggleSemesterCustom);
+        // New course list controls
+        const btnCreateNew = document.getElementById('btn-create-new-course');
+        if (btnCreateNew) {
+            btnCreateNew.addEventListener('click', startNewWizardCourse);
+        }
+        const filterSemester = document.getElementById('filter-semester');
+        if (filterSemester) {
+            filterSemester.addEventListener('change', (e) => {
+                renderWizardCourseList(e.target.value);
+            });
+        }
+
+        // Semester custom toggle and class styling
+        const cSemester = document.getElementById('course-semester');
+        if (cSemester) {
+            cSemester.addEventListener('change', (e) => {
+                toggleSemesterCustom();
+                e.target.classList.toggle('select-unselected', !e.target.value);
+            });
+        }
+
+        const cYear = document.getElementById('course-year');
+        if (cYear) {
+            cYear.addEventListener('change', (e) => {
+                e.target.classList.toggle('select-unselected', !e.target.value);
+            });
+        }
+
+        const cName = document.getElementById('course-name');
+        if (cName) {
+            cName.addEventListener('input', checkStep2SaveButtonVisibility);
+        }
 
         // Wizard navigation
         document.getElementById('wizard-back-home').addEventListener('click', showModeSelection);
@@ -2733,7 +2831,267 @@
             deleteBtn.style.display = currentUser && currentUser.isMaster ? 'none' : '';
         }
 
+        // 1. 기존 설정 로드하여 복원 (확인 절차 생략)
+        const saved = loadConfig();
+        if (saved) {
+            populateFromConfig(saved);
+        }
+
+        // 2. 로그인한 교수의 정보로 인적사항 강제 바인딩 (보안 및 일관성 확보)
+        if (currentUser) {
+            document.getElementById('prof-name').value = currentUser.name;
+            document.getElementById('prof-email').value = currentUser.email;
+            document.getElementById('prof-phone').value = currentUser.phone || '';
+            adminConfig.professor = {
+                name: currentUser.name,
+                email: currentUser.email,
+                phone: currentUser.phone || ''
+            };
+        }
+
+        // 3. 년도-학기 필터 드롭다운 구성 및 과목 목록 렌더링
+        buildSemesterFilterOptions();
+        renderWizardCourseList();
+
         goToStep(1);
+    }
+
+    function buildSemesterFilterOptions() {
+        const filterSelect = document.getElementById('filter-semester');
+        if (!filterSelect) return;
+        
+        // 기존 옵션 초기화 (첫 번째 "전체 학기" 제외)
+        filterSelect.innerHTML = '<option value="">전체 학기</option>';
+        
+        const courses = adminConfig.courses || [];
+        if (courses.length === 0) return;
+        
+        // 고유한 년도-학기 키 추출 (정렬: 최근 학기 우선)
+        const semesters = [...new Set(courses.map(c => `${c.year}-${c.semester}`))];
+        semesters.sort((a, b) => b.localeCompare(a));
+        
+        semesters.forEach(sem => {
+            const opt = document.createElement('option');
+            opt.value = sem;
+            opt.textContent = sem;
+            filterSelect.appendChild(opt);
+        });
+    }
+
+    function renderWizardCourseList(filterValue = '') {
+        const listUl = document.getElementById('course-list-ul');
+        if (!listUl) return;
+        listUl.innerHTML = '';
+
+        const courses = adminConfig.courses || [];
+        
+        // 필터링 적용
+        let filtered = courses.map((c, originalIndex) => ({ ...c, originalIndex }));
+        if (filterValue) {
+            filtered = filtered.filter(c => `${c.year}-${c.semester}` === filterValue);
+        }
+
+        if (filtered.length === 0) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'course-list-empty';
+            emptyDiv.textContent = filterValue ? '선택한 학기에 등록된 과목이 없습니다.' : '등록된 과목이 없습니다. 아래 버튼을 눌러 새 과목 설정을 시작하세요.';
+            listUl.appendChild(emptyDiv);
+            return;
+        }
+
+        filtered.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'course-item-btn';
+            
+            // 정보 컨테이너
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'course-item-info';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'course-item-name';
+            nameSpan.textContent = c.name;
+            
+            const metaSpan = document.createElement('span');
+            metaSpan.className = 'course-item-meta';
+            metaSpan.textContent = `${c.year}년 ${c.semester}`;
+            
+            infoDiv.appendChild(nameSpan);
+            infoDiv.appendChild(metaSpan);
+            item.appendChild(infoDiv);
+
+            // 액션 버튼 그룹
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'course-item-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn-course-action btn-course-edit';
+            editBtn.textContent = '수정';
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                selectWizardCourse(c.originalIndex);
+            };
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-course-action btn-course-delete';
+            delBtn.textContent = '삭제';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteWizardCourse(c.originalIndex);
+            };
+
+            actionsDiv.appendChild(editBtn);
+            actionsDiv.appendChild(delBtn);
+            item.appendChild(actionsDiv);
+
+            // 행 자체를 클릭해도 수정으로 이동하도록 지원
+            item.onclick = () => {
+                selectWizardCourse(c.originalIndex);
+            };
+
+            listUl.appendChild(item);
+        });
+    }
+
+    function selectWizardCourse(index) {
+        const c = adminConfig.courses[index];
+        if (!c) return;
+
+        adminConfig.course = {
+            year: c.year,
+            semester: c.semester,
+            name: c.name
+        };
+        adminConfig.evaluation = c.evaluation ? [...c.evaluation] : [];
+
+        // Step 2 입력 폼 채우기
+        const yearSelect = document.getElementById('course-year');
+        if (yearSelect) {
+            for (let i = 0; i < yearSelect.options.length; i++) {
+                if (yearSelect.options[i].value == c.year) {
+                    yearSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        const semSelect = document.getElementById('course-semester');
+        if (semSelect) {
+            let found = false;
+            for (let i = 0; i < semSelect.options.length; i++) {
+                if (semSelect.options[i].value === c.semester) {
+                    semSelect.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            const customInput = document.getElementById('course-semester-custom');
+            if (!found && c.semester) {
+                semSelect.value = '__custom__';
+                if (customInput) {
+                    customInput.value = c.semester;
+                    customInput.classList.add('visible');
+                }
+            } else {
+                if (customInput) {
+                    customInput.value = '';
+                    customInput.classList.remove('visible');
+                }
+            }
+        }
+
+        const nameInput = document.getElementById('course-name');
+        if (nameInput) {
+            nameInput.value = c.name || '';
+        }
+
+        // Step 3 평가 기준 바인딩
+        if (adminConfig.evaluation && adminConfig.evaluation.length > 0) {
+            initEvalCriteria();
+            adminConfig.evaluation.forEach(e => {
+                const cb = document.getElementById(`eval-cb-${e.id}`);
+                const ratio = document.getElementById(`eval-ratio-${e.id}`);
+                const item = document.getElementById(`eval-item-${e.id}`);
+                if (cb && ratio && item) {
+                    cb.checked = true;
+                    ratio.disabled = false;
+                    ratio.value = e.ratio;
+                    item.classList.add('selected');
+                }
+            });
+            updateEvalTotal();
+        } else {
+            initEvalCriteria();
+            updateEvalTotal();
+        }
+
+        goToStep(2);
+    }
+
+    function deleteWizardCourse(index) {
+        const c = adminConfig.courses[index];
+        if (!c) return;
+
+        if (!confirm(`⚠️ 정말로 이 과목을 삭제하시겠습니까?\n\n「${c.year} ${c.semester} — ${c.name}」\n\n삭제 시 관련된 성적 데이터 및 공시 일정 설정도 복구할 수 없이 함께 제거됩니다.`)) {
+            return;
+        }
+
+        // 1. 로컬 저장소 키값들 청소
+        const dataKey = `scorequery_data_${c.year}_${c.semester}_${c.name}`;
+        const publishKey = `scorequery_publish_${c.year}_${c.semester}_${c.name}`;
+        localStorage.removeItem(dataKey);
+        localStorage.removeItem(publishKey);
+
+        // 2. adminConfig.courses 에서 해당 과목 제거
+        adminConfig.courses.splice(index, 1);
+        saveConfig(adminConfig);
+
+        // 3. scorequery_courses 과목 목록 배열에서도 제거 및 저장
+        const courseListRaw = localStorage.getItem('scorequery_courses') || '[]';
+        const courseList = JSON.parse(courseListRaw);
+        const listIdx = courseList.findIndex(item =>
+            item.year === c.year &&
+            item.semester === c.semester &&
+            item.name === c.name
+        );
+        if (listIdx >= 0) {
+            courseList.splice(listIdx, 1);
+            localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
+        }
+
+        // 4. 드롭다운 필터 및 과목 리스트 UI 다시 그리기
+        buildSemesterFilterOptions();
+        const filterSelect = document.getElementById('filter-semester');
+        const currentFilter = filterSelect ? filterSelect.value : '';
+        renderWizardCourseList(currentFilter);
+
+        alert('✅ 과목 설정과 데이터가 완전히 삭제되었습니다.');
+    }
+
+    function startNewWizardCourse() {
+        // 전역 설정 비우기
+        adminConfig.course = { year: '2026', semester: '1학기', name: '' };
+        adminConfig.evaluation = [];
+
+        // Step 2 입력 폼 초기화
+        const yearSelect = document.getElementById('course-year');
+        if (yearSelect) yearSelect.value = '2026';
+        
+        const semSelect = document.getElementById('course-semester');
+        if (semSelect) semSelect.value = '1학기';
+        
+        const customInput = document.getElementById('course-semester-custom');
+        if (customInput) {
+            customInput.value = '';
+            customInput.classList.remove('visible');
+        }
+
+        const nameInput = document.getElementById('course-name');
+        if (nameInput) nameInput.value = '';
+
+        initEvalCriteria();
+        updateEvalTotal();
+
+        goToStep(2);
     }
 
     // ── 메일 클라이언트 미작동 시 폴백용 모달 ──
