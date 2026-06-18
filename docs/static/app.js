@@ -52,6 +52,29 @@
     let selectedCourse = null; // { year, semester, name }
     let cachedAvailableCourses = [];
 
+    function getCourseId(course) {
+        if (!course) return '';
+        if (course.id) return String(course.id);
+        return [course.year || '', course.semester || '', course.name || '']
+            .join('_')
+            .replace(/\s+/g, '_')
+            .replace(/[^\w가-힣.-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+    }
+
+    function getCourseDataKeys(course) {
+        const legacyKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
+        const idKey = `scorequery_data_${getCourseId(course)}`;
+        return Array.from(new Set([idKey, legacyKey]));
+    }
+
+    function getCoursePublishKeys(course) {
+        const legacyKey = `scorequery_publish_${course.year}_${course.semester}_${course.name}`;
+        const idKey = `scorequery_publish_${getCourseId(course)}`;
+        return Array.from(new Set([idKey, legacyKey]));
+    }
+
     // ── Event Listeners ──
     loginForm.addEventListener('submit', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
@@ -143,12 +166,14 @@
         }
 
         // 1) localStorage에서 먼저 최신 공시 정보를 체크해 봅니다.
-        const key = `scorequery_publish_${course.year}_${course.semester}_${course.name}`;
         let info = null;
         try {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-                info = JSON.parse(raw);
+            for (const key of getCoursePublishKeys(course)) {
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                    info = JSON.parse(raw);
+                    break;
+                }
             }
         } catch { /* ignore */ }
 
@@ -210,6 +235,7 @@
             const key = `${c.year || ''}_${c.semester || ''}_${c.name}`;
             if (!coursesMap.has(key)) {
                 coursesMap.set(key, {
+                    id: c.id || getCourseId(c),
                     year: c.year || '',
                     semester: c.semester || '',
                     name: c.name,
@@ -227,6 +253,7 @@
                 if (c.publishDate) existing.publishDate = c.publishDate;
                 if (c.publishStartDate) existing.publishStartDate = c.publishStartDate;
                 if (c.publishEndDate) existing.publishEndDate = c.publishEndDate;
+                if (c.id) existing.id = c.id;
                 if (c._source === 'data.json') existing._source = 'data.json';
             }
         };
@@ -265,6 +292,7 @@
                         year: c.year,
                         semester: c.semester,
                         name: c.name,
+                        id: c.id || getCourseId(c),
                         professor: parsed.professor,
                         published: c.published !== undefined ? c.published : true,
                         publishStartDate: c.publishStartDate || null,
@@ -333,17 +361,19 @@
 
         // 1) 과목별 키
         if (selectedCourse) {
-            const key = `scorequery_data_${selectedCourse.year}_${selectedCourse.semester}_${selectedCourse.name}`;
-            try {
-                const raw = localStorage.getItem(key);
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (isValid(parsed)) {
-                        parsed._source = 'course-key';
-                        sources.push(parsed);
+            for (const key of getCourseDataKeys(selectedCourse)) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (isValid(parsed)) {
+                            parsed._source = 'course-key';
+                            sources.push(parsed);
+                            break;
+                        }
                     }
-                }
-            } catch (e) { /* ignore */ }
+                } catch (e) { /* ignore */ }
+            }
         }
 
         // 2) 기존 단일 키 (하위호환)
@@ -452,17 +482,16 @@
             // 로그인 성공 시 실패 횟수 초기화 및 비식별 로그 적재
             localStorage.removeItem('scorequery_fail_count');
             
-            const sidHash = await sha256(studentId);
-            const subjectId = `${selectedCourse.year}_${selectedCourse.semester}_${selectedCourse.name}`;
+            const subjectId = getCourseId(selectedCourse);
             let viewLogs = [];
             try {
                 viewLogs = JSON.parse(localStorage.getItem('scorequery_view_logs') || '[]');
             } catch (err) {}
-            const alreadyLogged = viewLogs.some(log => log.subjectId === subjectId && log.sidHash === sidHash);
+            const alreadyLogged = viewLogs.some(log => log.subjectId === subjectId && log.viewKey === hashKey);
             if (!alreadyLogged) {
                 viewLogs.push({
                     subjectId,
-                    sidHash,
+                    viewKey: hashKey,
                     viewDate: new Date().toISOString()
                 });
                 localStorage.setItem('scorequery_view_logs', JSON.stringify(viewLogs));

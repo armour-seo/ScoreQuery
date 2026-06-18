@@ -8,6 +8,9 @@ venv/
 # Excel 원본 (개인정보 포함 — GitHub에 올리지 않음)
 *.xlsx
 
+# Local deployment/config secrets
+config.json
+
 # OS
 .DS_Store
 Thumbs.db

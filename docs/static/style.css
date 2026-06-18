@@ -1654,7 +1654,7 @@ select.form-input option {
 
 .validation-stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     gap: var(--space-sm);
     margin-top: var(--space-md);
     padding: var(--space-md);
@@ -1866,11 +1866,6 @@ select.form-input option {
     display: flex;
     gap: 10px;
     margin-top: 4px;
-}
-
-.publish-actions {
-    display: flex;
-    gap: 8px;
 }
 
 /* ── Preview Table ── */
@@ -2163,6 +2158,59 @@ select.form-input option {
     .wizard-save-info {
         max-width: none;
         text-align: center;
+    }
+
+    .course-selector {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .course-selector .wizard-select,
+    .course-selector select {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .pipeline-steps {
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    .pipe-step {
+        width: 100%;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .pipe-btn,
+    .publish-actions .pipe-btn {
+        width: 100%;
+        white-space: normal;
+    }
+
+    .pipe-arrow {
+        transform: rotate(90deg);
+        padding: 2px 0;
+    }
+
+    .publish-actions,
+    .publish-fields-row {
+        flex-direction: column;
+    }
+
+    .publish-field {
+        min-width: 0;
+    }
+
+    .course-filter-wrapper,
+    .course-item-btn {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .course-item-actions {
+        justify-content: flex-end;
     }
 }
 
@@ -2681,6 +2729,30 @@ select.form-input option {
 .course-item-meta {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+.course-status-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.course-status-badge.published {
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    color: #6ee7b7;
+}
+
+.course-status-badge.draft {
+    background: rgba(148, 163, 184, 0.1);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    color: #cbd5e1;
 }
 
 .course-item-actions {

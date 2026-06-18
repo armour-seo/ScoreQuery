@@ -27,6 +27,41 @@
         courses: [],    // [{ year, semester, name, evaluation: [...] }]
     };
 
+    function getCourseId(course) {
+        if (!course) return '';
+        if (course.id) return String(course.id);
+        return [course.year || '', course.semester || '', course.name || '']
+            .join('_')
+            .replace(/\s+/g, '_')
+            .replace(/[^\w가-힣.-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+    }
+
+    function withCourseId(course) {
+        return { ...course, id: getCourseId(course) };
+    }
+
+    function getCourseDataKeys(course) {
+        const idKey = `scorequery_data_${getCourseId(course)}`;
+        const legacyKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
+        return Array.from(new Set([idKey, legacyKey]));
+    }
+
+    function getCourseDataKey(course) {
+        return getCourseDataKeys(course)[0];
+    }
+
+    function getCoursePublishKeys(course) {
+        const idKey = `scorequery_publish_${getCourseId(course)}`;
+        const legacyKey = `scorequery_publish_${course.year}_${course.semester}_${course.name}`;
+        return Array.from(new Set([idKey, legacyKey]));
+    }
+
+    function getCoursePublishKey(course) {
+        return getCoursePublishKeys(course)[0];
+    }
+
     // ── DOM References ──
     const modeSection    = document.getElementById('mode-section');
     const adminSection   = document.getElementById('admin-section');
@@ -588,10 +623,10 @@
             c.year === adminConfig.course.year &&
             c.semester === adminConfig.course.semester
         );
-        const courseEntry = {
+        const courseEntry = withCourseId({
             ...adminConfig.course,
             evaluation: [...adminConfig.evaluation],
-        };
+        });
         if (existing >= 0) {
             const c = adminConfig.courses[existing];
             if (!confirm(
@@ -642,7 +677,7 @@
     function selectCourse(index) {
         const c = adminConfig.courses[index];
         if (!c) return;
-        adminConfig.course = { year: c.year, semester: c.semester, name: c.name };
+        adminConfig.course = withCourseId({ year: c.year, semester: c.semester, name: c.name, id: c.id });
         adminConfig.evaluation = c.evaluation ? [...c.evaluation] : [];
         renderCompleteSummary();
         renderViewStats();
@@ -850,14 +885,16 @@
     // 공시 (Publication) 관리
     // ──────────────────────────────────────────────
     function getPublishKey() {
-        const { course } = adminConfig;
-        return `scorequery_publish_${course.year}_${course.semester}_${course.name}`;
+        return getCoursePublishKey(adminConfig.course);
     }
 
     function getPublishInfo() {
         try {
-            const raw = localStorage.getItem(getPublishKey());
-            return raw ? JSON.parse(raw) : null;
+            for (const key of getCoursePublishKeys(adminConfig.course)) {
+                const raw = localStorage.getItem(key);
+                if (raw) return JSON.parse(raw);
+            }
+            return null;
         } catch { return null; }
     }
 
@@ -923,11 +960,58 @@
         }
     }
 
+    function getPublishReadiness(dataObj) {
+        if (!dataObj || !dataObj.students || Object.keys(dataObj.students).length === 0) {
+            return {
+                ok: false,
+                message: '공시할 성적 데이터가 없습니다. 먼저 Excel 파일을 업로드하고 성적데이터를 확정해 주세요.'
+            };
+        }
+
+        const report = dataObj.verificationReport || {};
+        const studentCount = Object.keys(dataObj.students || {}).length;
+        const classCount = Object.keys(dataObj.class_counts || {}).length;
+        const skippedRows = report.skippedRows || 0;
+        const missingScoreCells = report.missingScoreCells || 0;
+        const mismatches = report.totalMismatches || 0;
+
+        if (skippedRows > 0) {
+            return {
+                ok: false,
+                message: `인증정보(학번 또는 전화번호 뒷자리)가 누락된 행 ${skippedRows}건이 있어 공시할 수 없습니다.\nExcel 원본을 확인한 뒤 다시 업로드해 주세요.`
+            };
+        }
+
+        const lines = [
+            '공시 전 최종 확인',
+            '',
+            `- 수강생: ${studentCount}명`,
+            `- 분반: ${classCount}개`,
+            `- 총점 불일치: ${mismatches}건`,
+            `- 점수 결측: ${missingScoreCells}건`
+        ];
+
+        if (mismatches > 0 || missingScoreCells > 0) {
+            lines.push('', '검증 경고가 있습니다. 그래도 공시하시겠습니까?');
+        } else {
+            lines.push('', '검증 결과가 정상입니다. 공시하시겠습니까?');
+        }
+
+        return { ok: true, message: lines.join('\n') };
+    }
+
     function publishGrades() {
         const startInput = document.getElementById('publish-start-datetime');
         const endInput = document.getElementById('publish-end-datetime');
         const publishStartDate = startInput.value;
         const publishEndDate = endInput.value;
+        const dataObj = getCompiledDataJson();
+        const readiness = getPublishReadiness(dataObj);
+
+        if (!readiness.ok) {
+            alert(readiness.message);
+            return;
+        }
 
         if (!publishStartDate) {
             alert('공시 시작 일시를 선택해 주세요.');
@@ -943,12 +1027,17 @@
             return;
         }
 
+        if (!confirm(readiness.message)) {
+            return;
+        }
+
         const info = {
             published: true,
             publishStartDate: publishStartDate,
             publishEndDate: publishEndDate,
             publishDate: publishStartDate, // 하위 호환용
             publishedAt: new Date().toISOString(),
+            courseId: getCourseId(adminConfig.course),
             courseName: adminConfig.course.name,
         };
 
@@ -963,6 +1052,7 @@
             c.name === adminConfig.course.name
         );
         if (idx >= 0) {
+            courseList[idx].id = getCourseId(adminConfig.course);
             courseList[idx].publishStartDate = publishStartDate;
             courseList[idx].publishEndDate = publishEndDate;
             courseList[idx].publishDate = publishStartDate;
@@ -972,7 +1062,7 @@
             }
             localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
         } else {
-            courseList.push({
+            courseList.push(withCourseId({
                 year: adminConfig.course.year,
                 semester: adminConfig.course.semester,
                 name: adminConfig.course.name,
@@ -981,7 +1071,7 @@
                 publishDate: publishStartDate,
                 published: true,
                 professor: currentUser ? { name: currentUser.name, email: currentUser.email } : null
-            });
+            }));
             localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
         }
 
@@ -1005,7 +1095,7 @@
 
         if (!confirm('공시를 취소하시겠습니까?\n학생들의 성적 조회가 차단됩니다.')) return;
 
-        localStorage.removeItem(getPublishKey());
+        getCoursePublishKeys(adminConfig.course).forEach(key => localStorage.removeItem(key));
 
         // 입력 폼 필드 초기화
         const startInput = document.getElementById('publish-start-datetime');
@@ -1104,8 +1194,11 @@
         const { course } = adminConfig;
         if (!course || !course.name) return null;
 
-        const dataKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
-        const rawData = localStorage.getItem(dataKey);
+        let rawData = null;
+        for (const key of getCourseDataKeys(course)) {
+            rawData = localStorage.getItem(key);
+            if (rawData) break;
+        }
         if (!rawData) return null;
 
         try {
@@ -1119,6 +1212,7 @@
                 };
             }
             // 공시 정보도 data.json에 반영
+            dataObj.course.id = getCourseId(course);
             const pubInfo = getPublishInfo();
             if (pubInfo && pubInfo.published) {
                 dataObj.course.published = true;
@@ -1312,18 +1406,18 @@
 
         // adminConfig 업데이트
         adminConfig.professor = { ...professor };
-        if (course) adminConfig.course = { ...course };
+        if (course) adminConfig.course = withCourseId(course);
         if (evaluation) adminConfig.evaluation = [...evaluation];
 
         // courses 배열 호환성
         if (config.courses && config.courses.length > 0) {
-            adminConfig.courses = config.courses.map(c => ({ ...c }));
+            adminConfig.courses = config.courses.map(c => withCourseId(c));
         } else if (course && evaluation && evaluation.length > 0) {
             // 이전 형식 → courses 배열로 변환
-            adminConfig.courses = [{
+            adminConfig.courses = [withCourseId({
                 ...course,
                 evaluation: [...evaluation],
-            }];
+            })];
         }
     }
 
@@ -1799,9 +1893,24 @@
         }).join('');
 
         let strictVerificationHtml = '';
+        let verificationStatsHtml = '';
         if (dataJson && dataJson.verificationReport) {
             const report = dataJson.verificationReport;
             const modelText = '✅ <strong>비율 반영 완료</strong> (엑셀에 입력된 값에 추가 비율 가중치 변환 없이 그대로 수집 처리했습니다)';
+            verificationStatsHtml = `
+                <div class="validation-stat">
+                    <div class="validation-stat-value" style="color:${report.totalMismatches > 0 ? '#fcd34d' : '#6ee7b7'}">${report.totalMismatches || 0}</div>
+                    <div class="validation-stat-label">총점 불일치</div>
+                </div>
+                <div class="validation-stat">
+                    <div class="validation-stat-value" style="color:${report.missingScoreCells > 0 ? '#fcd34d' : '#6ee7b7'}">${report.missingScoreCells || 0}</div>
+                    <div class="validation-stat-label">점수 결측</div>
+                </div>
+                <div class="validation-stat">
+                    <div class="validation-stat-value" style="color:${report.skippedRows > 0 ? '#fca5a5' : '#6ee7b7'}">${report.skippedRows || 0}</div>
+                    <div class="validation-stat-label">인증정보 누락</div>
+                </div>
+            `;
                 
             let mismatchAlert = '';
             if (report.totalMismatches > 0) {
@@ -1858,6 +1967,7 @@
                         <div class="validation-stat-value" style="color:${validation.critical > 0 ? '#fca5a5' : '#6ee7b7'}">${validation.critical > 0 ? validation.critical + ' 오류' : '통과'}</div>
                         <div class="validation-stat-label">검증 상태</div>
                     </div>
+                    ${verificationStatsHtml}
                 </div>
             </div>
         `;
@@ -2038,10 +2148,12 @@
         if (!pendingUploadData) return;
 
         const { course } = adminConfig;
-        const dataKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
+        const dataKey = getCourseDataKey(course);
 
         try {
             localStorage.setItem(dataKey, JSON.stringify(pendingUploadData));
+            const legacyKey = getCourseDataKeys(course).find(key => key !== dataKey);
+            if (legacyKey) localStorage.removeItem(legacyKey);
 
             // 과목 목록도 저장 (학생모드 선택용)
             const courseListRaw = localStorage.getItem('scorequery_courses') || '[]';
@@ -2050,14 +2162,15 @@
                 c.year === course.year && c.semester === course.semester && c.name === course.name
             );
             if (!exists) {
-                courseList.push({
+                courseList.push(withCourseId({
                     year: course.year,
                     semester: course.semester,
                     name: course.name,
                     professor: currentUser ? { name: currentUser.name, email: currentUser.email } : null
-                });
+                }));
                 localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
             } else if (currentUser) {
+                exists.id = getCourseId(course);
                 exists.professor = { name: currentUser.name, email: currentUser.email };
                 localStorage.setItem('scorequery_courses', JSON.stringify(courseList));
             }
@@ -2094,6 +2207,8 @@
 
         let totalMismatches = 0;
         let mismatchDetails = [];
+        let skippedRows = 0;
+        let missingScoreCells = 0;
 
         // 2. 학생별 성적 변환 및 검증 루프
         let rowIndex = 0;
@@ -2111,10 +2226,13 @@
             const totalScore = mapping.total ? (parseFloat(row[mapping.total]) || 0) : 0;
             const specialScore = mapping.special ? (parseFloat(row[mapping.special]) || 0) : 0;
 
-            if (!studentId || !phoneLast4) continue;
+            if (!studentId || !phoneLast4) {
+                skippedRows++;
+                rowIndex++;
+                continue;
+            }
 
             const hashKey = await sha256(`${studentId}|${phoneLast4}`);
-            const studentIdHash = await sha256(studentId);
 
             const nameMasked = name.length <= 1 ? name : name[0] + '*'.repeat(name.length - 1);
             const idMasked = studentId.length > 4
@@ -2128,6 +2246,7 @@
                     const rawVal = parseFloat(row[colName]);
                     if (rawVal === '' || rawVal === null || rawVal === undefined || isNaN(rawVal)) {
                         scores[`${evalItem.id}_score`] = null;
+                        missingScoreCells++;
                     } else {
                         // 스케일링 적용(비율에 맞춤) 혹은 원본값 그대로 저장
                         scores[`${evalItem.id}_score`] = useWeightedScaling
@@ -2177,7 +2296,6 @@
             rowIndex++;
 
             const entry = {
-                student_id_hash: studentIdHash,
                 department: dept,
                 class_num: classNum,
                 student_id_masked: idMasked,
@@ -2242,6 +2360,7 @@
 
         return {
             course: {
+                id: getCourseId(adminConfig.course),
                 year: adminConfig.course.year,
                 semester: adminConfig.course.semester,
                 name: adminConfig.course.name
@@ -2259,7 +2378,9 @@
             verificationReport: {
                 useWeightedScaling,
                 totalMismatches,
-                mismatchDetails
+                mismatchDetails,
+                skippedRows,
+                missingScoreCells
             }
         };
     }
@@ -3204,6 +3325,7 @@
         filtered.forEach(c => {
             const item = document.createElement('div');
             item.className = 'course-item-btn';
+            item.dataset.courseId = getCourseId(c);
             
             // 정보 컨테이너
             const infoDiv = document.createElement('div');
@@ -3215,10 +3337,26 @@
             
             const metaSpan = document.createElement('span');
             metaSpan.className = 'course-item-meta';
-            metaSpan.textContent = `${c.year}년 ${c.semester}`;
+            const evalCount = c.evaluation ? c.evaluation.length : 0;
+            metaSpan.textContent = `${c.year} ${c.semester} · 평가항목 ${evalCount}개`;
+
+            const badgeSpan = document.createElement('span');
+            const pubInfo = (() => {
+                try {
+                    for (const key of getCoursePublishKeys(c)) {
+                        const raw = localStorage.getItem(key);
+                        if (raw) return JSON.parse(raw);
+                    }
+                } catch { /* ignore */ }
+                return null;
+            })();
+            const isPublished = pubInfo && pubInfo.published;
+            badgeSpan.className = `course-status-badge ${isPublished ? 'published' : 'draft'}`;
+            badgeSpan.textContent = isPublished ? '공시 설정됨' : '미공시';
             
             infoDiv.appendChild(nameSpan);
             infoDiv.appendChild(metaSpan);
+            infoDiv.appendChild(badgeSpan);
             item.appendChild(infoDiv);
 
             // 액션 버튼 그룹
@@ -3227,7 +3365,7 @@
 
             const editBtn = document.createElement('button');
             editBtn.className = 'btn-course-action btn-course-edit';
-            editBtn.textContent = '수정';
+            editBtn.textContent = '편집';
             editBtn.onclick = (e) => {
                 e.stopPropagation();
                 selectWizardCourse(c.originalIndex);
@@ -3338,10 +3476,8 @@
         }
 
         // 1. 로컬 저장소 키값들 청소
-        const dataKey = `scorequery_data_${c.year}_${c.semester}_${c.name}`;
-        const publishKey = `scorequery_publish_${c.year}_${c.semester}_${c.name}`;
-        localStorage.removeItem(dataKey);
-        localStorage.removeItem(publishKey);
+        getCourseDataKeys(c).forEach(key => localStorage.removeItem(key));
+        getCoursePublishKeys(c).forEach(key => localStorage.removeItem(key));
 
         // 2. adminConfig.courses 에서 해당 과목 제거
         adminConfig.courses.splice(index, 1);
@@ -3816,8 +3952,11 @@
             return;
         }
 
-        const dataKey = `scorequery_data_${course.year}_${course.semester}_${course.name}`;
-        const rawData = localStorage.getItem(dataKey);
+        let rawData = null;
+        for (const key of getCourseDataKeys(course)) {
+            rawData = localStorage.getItem(key);
+            if (rawData) break;
+        }
         if (!rawData) {
             widget.style.display = 'block';
             textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>성적 데이터가 업로드되지 않았습니다. Excel 파일을 업로드해 주세요.`;
@@ -3836,26 +3975,28 @@
                 return;
             }
 
-            // check if we have hashes
-            const hasHashes = studentEntries.some(s => s.student_id_hash);
-            if (!hasHashes) {
-                widget.style.display = 'block';
-                textEl.innerHTML = `📚 <strong>${course.year} ${course.semester} — ${course.name}</strong><br>⚠️ 기존 데이터 형식을 사용 중입니다. 성적 Excel 파일을 다시 업로드하면 실시간 열람 통계가 제공됩니다.`;
-                fillEl.style.width = '0%';
-                return;
-            }
-
             const viewLogs = JSON.parse(localStorage.getItem('scorequery_view_logs') || '[]');
-            const subjectId = `${course.year}_${course.semester}_${course.name}`;
+            const subjectId = getCourseId(course);
             const subjectLogs = viewLogs.filter(log => log.subjectId === subjectId);
-            const viewedHashes = new Set(subjectLogs.map(log => log.sidHash));
+            const viewedKeys = new Set(subjectLogs.map(log => log.viewKey || log.studentKey).filter(Boolean));
+            const legacyViewedHashes = new Set(subjectLogs.map(log => log.sidHash).filter(Boolean));
+            const studentKeys = Object.keys(parsed.students || {});
 
             let viewedCount = 0;
-            studentEntries.forEach(s => {
-                if (s.student_id_hash && viewedHashes.has(s.student_id_hash)) {
+            studentKeys.forEach(key => {
+                if (viewedKeys.has(key)) {
                     viewedCount++;
                 }
             });
+
+            // 하위 호환: 이전 버전의 student_id_hash/sidHash 로그가 남아 있는 경우만 보조 집계
+            if (viewedCount === 0 && legacyViewedHashes.size > 0) {
+                studentEntries.forEach(s => {
+                    if (s.student_id_hash && legacyViewedHashes.has(s.student_id_hash)) {
+                        viewedCount++;
+                    }
+                });
+            }
 
             const percent = ((viewedCount / totalCount) * 100).toFixed(1);
             widget.style.display = 'block';

@@ -515,13 +515,13 @@
                 <!-- ── Step 1: 교수 인적사항 ── -->
                 <div class="wizard-panel" id="wizard-step-1">
                     <div class="wizard-card">
-                        <div class="wizard-card-title">📚 이전 설정 불러오기</div>
-                        <div class="wizard-card-subtitle">기존에 등록된 과목 목록 중 하나를 선택하거나 새 과목을 등록합니다</div>
+                        <div class="wizard-card-title">📚 과목 선택</div>
+                        <div class="wizard-card-subtitle">등록된 과목을 편집하거나 새 과목을 추가합니다</div>
 
                         <!-- 📂 기존 등록 과목 목록 UI -->
                         <div class="course-list-box" id="course-list-box" style="margin-bottom: 20px;">
                             <div class="course-filter-wrapper">
-                                <span class="course-filter-label">📂 등록된 과목 목록</span>
+                                <span class="course-filter-label">등록 과목</span>
                                 <select id="filter-semester" class="course-filter-select">
                                     <option value="">전체 학기</option>
                                     <!-- JS에서 동적으로 학기 옵션 채움 -->
@@ -533,7 +533,10 @@
                         </div>
 
                         <div style="margin-top: 15px; margin-bottom: 20px;">
-                            <button class="btn-next" id="btn-create-new-course" style="width:100%;background:rgba(99, 102, 241, 0.15);border:1px solid rgba(99, 102, 241, 0.3);color:#c7d2fe;padding:12px;">➕ 새 과목 등록하기</button>
+                            <button class="btn-next" id="btn-create-new-course" style="width:100%;background:rgba(99, 102, 241, 0.15);border:1px solid rgba(99, 102, 241, 0.3);color:#c7d2fe;padding:12px;">
+                                <span class="wizard-btn-icon" aria-hidden="true">➕</span>
+                                <span class="wizard-btn-text">새 과목 등록</span>
+                            </button>
                         </div>
 
                         <!-- 기존 개인정보 및 이전 불러오기 폼 (오류 방지를 위해 숨김 유지) -->
