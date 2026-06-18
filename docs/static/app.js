@@ -281,37 +281,7 @@
             }
         } catch { /* ignore */ }
 
-        // 3) data.json 파일에서 비동기 조회 및 폴백 (캐시 방지 적용)
-        try {
-            const res = await fetch('data.json?_t=' + Date.now());
-            if (res.ok) {
-                const parsed = await res.json();
-                if (parsed.course && parsed.course.name) {
-                    const c = parsed.course;
-                    addCourse({
-                        year: c.year,
-                        semester: c.semester,
-                        name: c.name,
-                        id: c.id || getCourseId(c),
-                        professor: parsed.professor,
-                        published: c.published !== undefined ? c.published : true,
-                        publishStartDate: c.publishStartDate || null,
-                        publishEndDate: c.publishEndDate || null,
-                        publishDate: c.publishDate || null,
-                        _source: 'data.json'
-                    });
-                } else {
-                    // 레거시 data.json 폴백 (2026년 1학기 경영정보시스템)
-                    addCourse({
-                        year: '2026',
-                        semester: '1학기',
-                        name: '경영정보시스템',
-                        published: true,
-                        _source: 'data.json'
-                    });
-                }
-            }
-        } catch (e) { /* ignore */ }
+        // Plaintext data.json is intentionally not loaded. Private grade files must stay encrypted.
 
         cachedAvailableCourses = Array.from(coursesMap.values());
     }
@@ -388,17 +358,7 @@
             }
         } catch (e) { /* ignore */ }
 
-        // 3) data.json 파일 (캐시 방지 적용)
-        try {
-            const res = await fetch('data.json?_t=' + Date.now());
-            if (res.ok) {
-                const parsed = await res.json();
-                if (isValid(parsed)) {
-                    parsed._source = 'data.json';
-                    sources.push(parsed);
-                }
-            }
-        } catch (e) { /* ignore */ }
+        // Plaintext data.json is intentionally not loaded. Use local session data or a secure API.
 
         return sources;
     }

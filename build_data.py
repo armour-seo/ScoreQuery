@@ -11,17 +11,22 @@ GitHub Pages 배포용 데이터 파일을 생성합니다.
 
 사용법:
   python build_data.py
-  → docs/data.json 생성
+  → docs/data.enc.json 생성
 """
 
 import hashlib
 import json
 import math
+import os
 import re
 import openpyxl
 
+from scorequery_crypto import get_env_passphrase, get_passphrase, load_encrypted_json, write_encrypted_json
+
 EXCEL_FILE = "2026-1학기_경영정보론_서창갑.xlsx"
-OUTPUT_FILE = "docs/data.json"
+PLAINTEXT_OUTPUT_FILE = "docs/data.json"
+OUTPUT_FILE = "docs/data.enc.json"
+ENCRYPTED_CONFIG_FILE = "config.enc.json"
 
 # 컬럼 인덱스 (0-based)
 COL = {
@@ -237,14 +242,22 @@ def build():
         class_averages[str(cn)] = avg
         class_maxes[str(cn)] = mx
         class_counts[str(cn)] = data["count"]
-    # 기존 data.json에서 gas_url을 읽어오거나 config.json에서 불러오기
-    import os
+    # 기존 암호화 파일이나 로컬 설정에서 gas_url을 읽어오기
     gas_url = ""
+    env_passphrase = get_env_passphrase()
+
     try:
-        if os.path.exists(OUTPUT_FILE):
-            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
-                old_data = json.load(f)
-                gas_url = old_data.get("gas_url", "")
+        if env_passphrase and os.path.exists(OUTPUT_FILE):
+            old_data = load_encrypted_json(OUTPUT_FILE, env_passphrase)
+            gas_url = old_data.get("gas_url", "")
+    except Exception:
+        pass
+
+    try:
+        if env_passphrase and os.path.exists(ENCRYPTED_CONFIG_FILE):
+            cfg = load_encrypted_json(ENCRYPTED_CONFIG_FILE, env_passphrase)
+            if cfg.get("gas_url"):
+                gas_url = cfg.get("gas_url")
     except Exception:
         pass
 
@@ -276,13 +289,15 @@ def build():
     }
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, separators=(",", ":"))
+    passphrase = get_passphrase(confirm=not bool(env_passphrase))
+    write_encrypted_json(OUTPUT_FILE, output, passphrase)
+    if os.path.exists(PLAINTEXT_OUTPUT_FILE):
+        os.remove(PLAINTEXT_OUTPUT_FILE)
 
     wb.close()
-    print(f"[build_data] {len(students)}명 데이터 -> {OUTPUT_FILE} 생성 완료")
+    print(f"[build_data] {len(students)}명 데이터 -> {OUTPUT_FILE} 암호화 생성 완료")
     print(f"   분반: {len(class_averages)}개, 파일크기: {os.path.getsize(OUTPUT_FILE):,} bytes")
-    print(f"   키 방식: SHA-256(학번|전화번호뒷4자리)")
+    print("   보안방식: AES-256-GCM + PBKDF2-HMAC-SHA256, SHA-256(학번|전화번호뒷4자리)")
 
 
 if __name__ == "__main__":

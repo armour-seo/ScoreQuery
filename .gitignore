@@ -10,10 +10,15 @@ venv/
 *.xls
 *.xlsm
 *.docx
+*.enc
+*.enc.json
+data.json
 docs/data.json
+docs/data.enc.json
 
 # Local deployment/config secrets
 config.json
+config.enc.json
 
 # OS
 .DS_Store

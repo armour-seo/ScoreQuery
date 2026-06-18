@@ -11,7 +11,16 @@ import json
 from flask import Flask, render_template, request, jsonify
 import openpyxl
 
+from scorequery_crypto import (
+    PASSPHRASE_ENV,
+    EncryptionConfigError,
+    get_env_passphrase,
+    write_encrypted_json,
+)
+
 app = Flask(__name__)
+ENCRYPTED_DATA_FILE = os.path.join("docs", "data.enc.json")
+PLAINTEXT_DATA_FILE = os.path.join("docs", "data.json")
 
 # ──────────────────────────────────────────────
 # Excel 데이터 로드 및 전처리
@@ -253,14 +262,29 @@ def save_data():
         if not data:
             return jsonify({"error": "올바르지 않은 데이터 형식입니다."}), 400
 
-        # docs/data.json에 저장
-        output_path = os.path.join("docs", "data.json")
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+        passphrase = get_env_passphrase()
+        if not passphrase:
+            raise EncryptionConfigError(
+                f"{PASSPHRASE_ENV} 환경변수를 설정해야 암호화 저장을 할 수 있습니다."
+            )
 
-        print(f"[ScoreQuery] data.json 자동으로 저장 완료 ({os.path.getsize(output_path)} bytes)")
-        return jsonify({"success": True, "message": "성적 데이터가 서버에 성공적으로 저장되었습니다."})
+        write_encrypted_json(ENCRYPTED_DATA_FILE, data, passphrase)
+        if os.path.exists(PLAINTEXT_DATA_FILE):
+            os.remove(PLAINTEXT_DATA_FILE)
+
+        print(f"[ScoreQuery] encrypted data saved ({os.path.getsize(ENCRYPTED_DATA_FILE)} bytes)")
+        return jsonify({
+            "success": True,
+            "message": "성적 데이터가 AES-256-GCM으로 암호화되어 저장되었습니다.",
+            "path": ENCRYPTED_DATA_FILE,
+        })
+    except EncryptionConfigError as e:
+        print(f"[ScoreQuery] encryption configuration error: {e}")
+        return jsonify({
+            "error": str(e),
+            "encryption_required": True,
+            "env": PASSPHRASE_ENV,
+        }), 500
     except Exception as e:
         print(f"❌ 데이터 저장 중 오류 발생: {e}")
         return jsonify({"error": f"데이터 저장 실패: {str(e)}"}), 500

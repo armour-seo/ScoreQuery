@@ -1079,9 +1079,9 @@
 
         autoSaveDataJsonToServer().then(res => {
             if (res && res.success) {
-                alert('📢 성적이 공시되었으며, 서버의 docs/data.json 파일로 자동 저장되었습니다!');
+                alert('📢 성적이 공시되었으며, 서버의 docs/data.enc.json 파일로 암호화 저장되었습니다!');
             } else {
-                alert('📢 성적이 공시되었습니다!\n(로컬 백엔드 서버가 종료 상태이거나 연결할 수 없어 data.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 수동 저장해 주세요.)');
+                alert('📢 성적이 공시되었습니다!\n(로컬 백엔드 서버가 종료 상태이거나 암호화 비밀번호 환경변수가 없어 data.enc.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 암호화 파일로 수동 저장해 주세요.)');
             }
         });
     }
@@ -1123,9 +1123,9 @@
         
         autoSaveDataJsonToServer().then(res => {
             if (res && res.success) {
-                alert('🚫 공시가 취소되었으며, 서버의 docs/data.json 파일로 자동 저장되었습니다.');
+                alert('🚫 공시가 취소되었으며, 서버의 docs/data.enc.json 파일로 암호화 저장되었습니다.');
             } else {
-                alert('🚫 공시가 취소되었습니다.\n(로컬 백엔드 서버가 종료 상태이거나 연결할 수 없어 data.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 수동 저장해 주세요.)');
+                alert('🚫 공시가 취소되었습니다.\n(로컬 백엔드 서버가 종료 상태이거나 암호화 비밀번호 환경변수가 없어 data.enc.json 자동 저장에 실패했습니다. 필요한 경우 아래의 다운로드 버튼을 눌러 암호화 파일로 수동 저장해 주세요.)');
             }
         });
     }
@@ -1229,7 +1229,115 @@
         }
     }
 
-    function downloadDataJson() {
+    function bytesToBase64(bytes) {
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
+    }
+
+    async function encryptJsonEnvelope(dataObj, passphrase) {
+        if (!window.crypto || !crypto.subtle) {
+            throw new Error('이 브라우저는 Web Crypto 암호화를 지원하지 않습니다.');
+        }
+
+        const encoder = new TextEncoder();
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const nonce = crypto.getRandomValues(new Uint8Array(12));
+        const keyMaterial = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(passphrase),
+            'PBKDF2',
+            false,
+            ['deriveKey']
+        );
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+            keyMaterial,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt']
+        );
+        const encrypted = await crypto.subtle.encrypt(
+            {
+                name: 'AES-GCM',
+                iv: nonce,
+                additionalData: encoder.encode('scorequery-encrypted-json/v1')
+            },
+            key,
+            encoder.encode(JSON.stringify(dataObj))
+        );
+
+        return {
+            scorequery_encrypted: true,
+            format: 'scorequery-encrypted-json',
+            version: 1,
+            algorithm: 'AES-256-GCM',
+            kdf: {
+                name: 'PBKDF2-HMAC-SHA256',
+                iterations: 600000,
+                salt: bytesToBase64(salt)
+            },
+            nonce: bytesToBase64(nonce),
+            ciphertext: bytesToBase64(new Uint8Array(encrypted))
+        };
+    }
+
+    function requestEncryptionPassphrase() {
+        return new Promise(resolve => {
+            const modalId = 'scorequery-encryption-modal';
+            const old = document.getElementById(modalId);
+            if (old) old.remove();
+
+            const modal = document.createElement('div');
+            modal.id = modalId;
+            modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.78);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
+            modal.innerHTML = `
+                <div style="width:min(420px,100%);background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:22px;color:#f8fafc;box-shadow:0 20px 40px rgba(0,0,0,.4);">
+                    <h3 style="margin:0 0 10px;font-size:18px;">암호화 비밀번호</h3>
+                    <p style="margin:0 0 16px;color:#cbd5e1;font-size:13px;line-height:1.5;">성적 데이터는 AES-256-GCM으로 암호화되어 저장됩니다. 비밀번호를 잊으면 복구할 수 없습니다.</p>
+                    <label style="display:block;margin-bottom:6px;color:#cbd5e1;font-size:12px;font-weight:700;">비밀번호</label>
+                    <input id="enc-pass-1" type="password" autocomplete="new-password" style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.16);background:#0f172a;color:#fff;">
+                    <label style="display:block;margin-bottom:6px;color:#cbd5e1;font-size:12px;font-weight:700;">비밀번호 확인</label>
+                    <input id="enc-pass-2" type="password" autocomplete="new-password" style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.16);background:#0f172a;color:#fff;">
+                    <div id="enc-pass-error" style="display:none;margin-bottom:12px;color:#fca5a5;font-size:12px;"></div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button id="enc-cancel" type="button" style="padding:9px 13px;border-radius:6px;border:1px solid rgba(255,255,255,.16);background:#1f2937;color:#e5e7eb;cursor:pointer;">취소</button>
+                        <button id="enc-ok" type="button" style="padding:9px 13px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">암호화</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            const pass1 = modal.querySelector('#enc-pass-1');
+            const pass2 = modal.querySelector('#enc-pass-2');
+            const error = modal.querySelector('#enc-pass-error');
+            const finish = value => {
+                modal.remove();
+                resolve(value);
+            };
+            const showModalError = message => {
+                error.textContent = message;
+                error.style.display = 'block';
+            };
+            modal.querySelector('#enc-cancel').addEventListener('click', () => finish(null));
+            modal.querySelector('#enc-ok').addEventListener('click', () => {
+                if (!pass1.value || pass1.value.length < 12) {
+                    showModalError('비밀번호는 12자 이상으로 설정하세요.');
+                    return;
+                }
+                if (pass1.value !== pass2.value) {
+                    showModalError('비밀번호 확인이 일치하지 않습니다.');
+                    return;
+                }
+                finish(pass1.value);
+            });
+            pass1.focus();
+        });
+    }
+
+    async function downloadDataJson() {
         const dataObj = getCompiledDataJson();
         if (!dataObj) {
             alert('성적 데이터가 없습니다. 먼저 2단계에서 성적 파일을 업로드하고 확정해 주세요.');
@@ -1237,21 +1345,24 @@
         }
 
         try {
-            // data.json 형식으로 다운로드
-            const jsonString = JSON.stringify(dataObj, null, 2);
+            const passphrase = await requestEncryptionPassphrase();
+            if (!passphrase) return;
+
+            const encrypted = await encryptJsonEnvelope(dataObj, passphrase);
+            const jsonString = JSON.stringify(encrypted, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             
             const link = document.createElement('a');
             link.href = url;
-            link.download = 'data.json';
+            link.download = 'data.enc.json';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
         } catch (e) {
-            console.error('Failed to download data.json:', e);
-            alert('파일 다운로드 중 오류가 발생했습니다: ' + e.message);
+            console.error('Failed to download encrypted data:', e);
+            alert('암호화 파일 다운로드 중 오류가 발생했습니다: ' + e.message);
         }
     }
 
@@ -2519,7 +2630,7 @@
         document.getElementById('btn-publish').addEventListener('click', publishGrades);
         document.getElementById('btn-unpublish').addEventListener('click', unpublishGrades);
 
-        // data.json 다운로드 버튼
+        // data.enc.json 다운로드 버튼
         const btnDownloadJson = document.getElementById('btn-download-json');
         if (btnDownloadJson) {
             btnDownloadJson.addEventListener('click', downloadDataJson);
@@ -2562,20 +2673,16 @@
 
     async function syncGasUrlFromServer() {
         try {
-            const res = await fetch('data.json?_t=' + Date.now());
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data.gas_url) {
-                    localStorage.setItem('scorequery_gas_url', data.gas_url);
-                    const gasInput = document.getElementById('gas-url-input');
-                    if (gasInput) {
-                        gasInput.value = data.gas_url;
-                    }
-                    return data.gas_url;
+            const savedUrl = localStorage.getItem('scorequery_gas_url');
+            if (savedUrl) {
+                const gasInput = document.getElementById('gas-url-input');
+                if (gasInput) {
+                    gasInput.value = savedUrl;
                 }
+                return savedUrl;
             }
         } catch (e) {
-            console.warn('[ScoreQuery] Failed to sync GAS URL from server:', e);
+            console.warn('[ScoreQuery] Failed to load GAS URL from local storage:', e);
         }
         return null;
     }
@@ -2865,9 +2972,9 @@
                     const loadedUrl = await syncGasUrlFromServer();
                     if (loadedUrl) {
                         gasInput.value = loadedUrl;
-                        alert('✅ 서버(data.json)로부터 자동 메일 발송 URL을 성공적으로 가져왔습니다.');
+                        alert('✅ 로컬 저장소에서 자동 메일 발송 URL을 성공적으로 가져왔습니다.');
                     } else {
-                        alert('ℹ️ 서버의 data.json 파일에 설정된 자동 메일 발송 URL이 없습니다.');
+                        alert('ℹ️ 로컬 저장소에 설정된 자동 메일 발송 URL이 없습니다.');
                     }
                 };
             }
