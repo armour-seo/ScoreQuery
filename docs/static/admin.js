@@ -3011,6 +3011,13 @@
         };
 
         const gasUrl = localStorage.getItem('scorequery_gas_url');
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!gasUrl && !isLocalhost) {
+            errorEl.textContent = '❌ 원격 승인 데이터베이스 설정(GAS URL)이 완료되지 않았습니다. 마스터 교수님께 문의하여 설정(public-config.json 배포)을 완료해 주십시오.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
         if (gasUrl) {
             try {
                 // GAS 데이터베이스에 가입 요청 전송

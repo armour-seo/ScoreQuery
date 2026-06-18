@@ -294,6 +294,15 @@ def build():
     if os.path.exists(PLAINTEXT_OUTPUT_FILE):
         os.remove(PLAINTEXT_OUTPUT_FILE)
 
+    # public-config.json 생성 (가입/로그인 시 GAS URL 조회를 위한 공개 설정 파일)
+    public_config_path = os.path.join("docs", "public-config.json")
+    try:
+        with open(public_config_path, "w", encoding="utf-8") as f:
+            json.dump({"gas_url": gas_url}, f, ensure_ascii=False, indent=2)
+        print(f"[build_data] {public_config_path} 생성 완료 (gas_url: {gas_url})")
+    except Exception as e:
+        print(f"⚠️ [build_data] public-config.json 생성 실패: {e}")
+
     wb.close()
     print(f"[build_data] {len(students)}명 데이터 -> {OUTPUT_FILE} 암호화 생성 완료")
     print(f"   분반: {len(class_averages)}개, 파일크기: {os.path.getsize(OUTPUT_FILE):,} bytes")
