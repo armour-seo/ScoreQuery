@@ -237,6 +237,323 @@
         }
     }
 
+    // ── 교수 정보관리 통합 모달 ──
+    function showProfessorInfoMgmtModal(initialTab = 'info') {
+        const modalId = 'professor-info-mgmt-modal';
+        const existing = document.getElementById(modalId);
+        if (existing) existing.remove();
+
+        if (!currentUser) {
+            alert('⚠️ 현재 로그인 세션 정보가 없습니다. 다시 로그인해 주세요.');
+            handleLogoutAction();
+            return;
+        }
+
+        const modalHtml = `
+            <div id="${modalId}" style="
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(15, 23, 42, 0.75);
+                backdrop-filter: blur(8px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 99999;
+                font-family: inherit;
+            ">
+                <div style="
+                    background: rgba(30, 41, 59, 0.95);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 16px;
+                    width: 95%;
+                    max-width: 460px;
+                    padding: 24px;
+                    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+                    color: #f8fafc;
+                    box-sizing: border-box;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                        <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #f59e0b;">⚙️ 교수 정보 관리</h3>
+                        <button id="close-mgmt-modal-btn" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
+                    </div>
+
+                    <!-- Tab Headers -->
+                    <div style="display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                        <button id="tab-btn-info" style="flex: 1; padding: 8px 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent; border-radius: 6px; background: none; color: #94a3b8; cursor: pointer; transition: all 0.2s;">👤 정보수정</button>
+                        <button id="tab-btn-pw" style="flex: 1; padding: 8px 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent; border-radius: 6px; background: none; color: #94a3b8; cursor: pointer; transition: all 0.2s;">🔑 비밀번호</button>
+                        <button id="tab-btn-delete" style="flex: 1; padding: 8px 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent; border-radius: 6px; background: none; color: #94a3b8; cursor: pointer; transition: all 0.2s;">🗑️ 회원탈퇴</button>
+                    </div>
+
+                    <!-- Tab Contents -->
+                    <!-- 1. 정보수정 -->
+                    <div id="tab-content-info" class="tab-pane" style="display: none;">
+                        <div style="margin-bottom: 14px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">이름</label>
+                            <input type="text" id="mgmt-prof-name" placeholder="홍길동" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                        </div>
+                        <div style="margin-bottom: 14px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">이메일 (아이디)</label>
+                            <input type="email" id="mgmt-prof-email" readonly style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); background: rgba(15,23,42,0.3); color: #94a3b8; font-size: 13px; outline: none; cursor: not-allowed;">
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">전화번호</label>
+                            <input type="tel" id="mgmt-prof-phone" placeholder="010-1234-5678" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                        </div>
+                        <div id="mgmt-info-error" style="display: none; color: #f87171; font-size: 12px; margin-bottom: 16px; line-height: 1.4;"></div>
+                        <button id="save-info-btn" style="width: 100%; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 10px; border-radius: 6px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">개인정보 저장</button>
+                    </div>
+
+                    <!-- 2. 비밀번호 변경 -->
+                    <div id="tab-content-pw" class="tab-pane" style="display: none;">
+                        <div style="margin-bottom: 14px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">현재 비밀번호</label>
+                            <input type="password" id="mgmt-pw-current" placeholder="현재 비밀번호 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                        </div>
+                        <div style="margin-bottom: 14px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호</label>
+                            <input type="password" id="mgmt-pw-new" placeholder="대소문자/숫자/특수문자 포함 8자 이상" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호 확인</label>
+                            <input type="password" id="mgmt-pw-confirm" placeholder="새 비밀번호 재확인 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
+                        </div>
+                        <div id="mgmt-pw-error" style="display: none; color: #f87171; font-size: 12px; margin-bottom: 16px; line-height: 1.4;"></div>
+                        <button id="save-pw-btn" style="width: 100%; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; padding: 10px; border-radius: 6px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">비밀번호 변경 저장</button>
+                    </div>
+
+                    <!-- 3. 회원탈퇴 -->
+                    <div id="tab-content-delete" class="tab-pane" style="display: none;">
+                        <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                            <h4 style="margin: 0 0 8px 0; color: #fca5a5; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">⚠️ 회원 탈퇴 주의사항</h4>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.75rem; color: #fca5a5; line-height: 1.5; display: flex; flex-direction: column; gap: 4px;">
+                                <li>회원 탈퇴 처리 시 즉시 로그아웃되며 계정이 비활성화 상태가 됩니다.</li>
+                                <li>탈퇴 정보는 시스템 이력에 안전하게 마킹(Soft Delete) 보존됩니다.</li>
+                                <li>마스터 계정 관리자의 승인 및 복구 전까지는 동일 이메일로 가입 및 로그인이 불가합니다.</li>
+                            </ul>
+                        </div>
+                        
+                        <div style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 20px;">
+                            <input type="checkbox" id="agree-delete-chk" style="margin-top: 2px; cursor: pointer;">
+                            <label for="agree-delete-chk" style="font-size: 0.8rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">위 주의사항을 명확히 확인하였으며, 이에 동의합니다.</label>
+                        </div>
+                        
+                        <button id="execute-delete-btn" disabled style="
+                            width: 100%;
+                            background: #ef4444;
+                            color: white;
+                            border: none;
+                            padding: 10px;
+                            border-radius: 6px;
+                            font-size: 0.875rem;
+                            font-weight: 600;
+                            cursor: not-allowed;
+                            opacity: 0.5;
+                            transition: all 0.2s;
+                        ">🗑️ 회원 탈퇴 실행</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const modal = document.getElementById(modalId);
+        const closeBtn = document.getElementById('close-mgmt-modal-btn');
+        const tabBtnInfo = document.getElementById('tab-btn-info');
+        const tabBtnPw = document.getElementById('tab-btn-pw');
+        const tabBtnDelete = document.getElementById('tab-btn-delete');
+        
+        const tabContentInfo = document.getElementById('tab-content-info');
+        const tabContentPw = document.getElementById('tab-content-pw');
+        const tabContentDelete = document.getElementById('tab-content-delete');
+
+        // 프리필드
+        document.getElementById('mgmt-prof-name').value = currentUser.name || '';
+        document.getElementById('mgmt-prof-email').value = currentUser.email || '';
+        document.getElementById('mgmt-prof-phone').value = currentUser.phone || '';
+
+        // 마스터 계정의 경우 비밀번호 변경만 허용
+        if (currentUser.isMaster) {
+            tabBtnInfo.style.display = 'none';
+            tabBtnDelete.style.display = 'none';
+            initialTab = 'pw';
+        }
+
+        // 닫기
+        closeBtn.onclick = () => modal.remove();
+
+        // 탭 전환 함수
+        function switchTab(tabName) {
+            // 버튼 상태 초기화
+            [tabBtnInfo, tabBtnPw, tabBtnDelete].forEach(btn => {
+                btn.style.background = 'none';
+                btn.style.color = '#94a3b8';
+                btn.style.borderColor = 'transparent';
+            });
+            // 본문 상태 초기화
+            [tabContentInfo, tabContentPw, tabContentDelete].forEach(pane => {
+                pane.style.display = 'none';
+            });
+
+            if (tabName === 'info') {
+                tabBtnInfo.style.background = 'rgba(59, 130, 246, 0.15)';
+                tabBtnInfo.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+                tabBtnInfo.style.color = '#60a5fa';
+                tabContentInfo.style.display = 'block';
+            } else if (tabName === 'pw') {
+                tabBtnPw.style.background = 'rgba(245, 158, 11, 0.15)';
+                tabBtnPw.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+                tabBtnPw.style.color = '#fbbf24';
+                tabContentPw.style.display = 'block';
+            } else if (tabName === 'delete') {
+                tabBtnDelete.style.background = 'rgba(239, 68, 68, 0.15)';
+                tabBtnDelete.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                tabBtnDelete.style.color = '#fca5a5';
+                tabContentDelete.style.display = 'block';
+            }
+        }
+
+        // 초기 탭 설정
+        switchTab(initialTab);
+
+        tabBtnInfo.onclick = () => switchTab('info');
+        tabBtnPw.onclick = () => switchTab('pw');
+        tabBtnDelete.onclick = () => switchTab('delete');
+
+        // ── 1. 정보 수정 비즈니스 로직 ──
+        const saveInfoBtn = document.getElementById('save-info-btn');
+        const infoErr = document.getElementById('mgmt-info-error');
+        saveInfoBtn.onclick = async () => {
+            infoErr.style.display = 'none';
+            const nameVal = document.getElementById('mgmt-prof-name').value.trim();
+            const phoneVal = document.getElementById('mgmt-prof-phone').value.trim();
+
+            if (!nameVal || !phoneVal) {
+                infoErr.textContent = '❌ 모든 항목을 입력해 주세요.';
+                infoErr.style.display = 'block';
+                return;
+            }
+
+            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+            const idx = users.findIndex(u => u.email === currentUser.email);
+            if (idx >= 0) {
+                users[idx].name = nameVal;
+                users[idx].phone = phoneVal;
+                localStorage.setItem('scorequery_users', JSON.stringify(users));
+
+                // 세션 및 현재 데이터 갱신
+                currentUser.name = nameVal;
+                currentUser.phone = phoneVal;
+                sessionStorage.setItem('scorequery_session', JSON.stringify(currentUser));
+
+                // 마법사 1단계 교수자 입력폼에도 즉시 동기화
+                const profNameField = document.getElementById('prof-name');
+                const profPhoneField = document.getElementById('prof-phone');
+                if (profNameField) profNameField.value = nameVal;
+                if (profPhoneField) profPhoneField.value = phoneVal;
+                adminConfig.professor = { name: nameVal, email: currentUser.email, phone: phoneVal };
+
+                alert('👤 교수자 정보가 성공적으로 수정되었습니다.');
+                modal.remove();
+            } else {
+                alert('⚠️ 정보 수정 중 오류가 발생했습니다. 다시 로그인해 주세요.');
+                handleLogoutAction();
+            }
+        };
+
+        // ── 2. 비밀번호 변경 비즈니스 로직 ──
+        const savePwBtn = document.getElementById('save-pw-btn');
+        const pwErr = document.getElementById('mgmt-pw-error');
+        savePwBtn.onclick = async () => {
+            pwErr.style.display = 'none';
+            const currentVal = document.getElementById('mgmt-pw-current').value;
+            const newVal = document.getElementById('mgmt-pw-new').value;
+            const confirmVal = document.getElementById('mgmt-pw-confirm').value;
+
+            if (!currentVal || !newVal || !confirmVal) {
+                pwErr.textContent = '❌ 모든 항목을 입력해 주세요.';
+                pwErr.style.display = 'block';
+                return;
+            }
+
+            // 현재 비밀번호 검증
+            const currentHashed = await sha256(currentVal);
+            if (currentUser.pw !== currentHashed) {
+                pwErr.textContent = '❌ 현재 비밀번호가 일치하지 않습니다.';
+                pwErr.style.display = 'block';
+                return;
+            }
+
+            // 새 비밀번호 조건 검증 (대소문자, 숫자, 특수문자 8자 이상)
+            const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+            if (!pwRegex.test(newVal)) {
+                pwErr.textContent = '❌ 새 비밀번호는 영문 대소문자, 숫자, 특수문자를 각각 최소 1개 이상 포함하여 8자 이상이어야 합니다.';
+                pwErr.style.display = 'block';
+                return;
+            }
+
+            if (newVal !== confirmVal) {
+                pwErr.textContent = '❌ 새 비밀번호와 새 비밀번호 확인이 일치하지 않습니다.';
+                pwErr.style.display = 'block';
+                return;
+            }
+
+            const newHashed = await sha256(newVal);
+            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+            const idx = users.findIndex(u => u.email === currentUser.email);
+            if (idx >= 0) {
+                users[idx].pw = newHashed;
+                localStorage.setItem('scorequery_users', JSON.stringify(users));
+
+                currentUser.pw = newHashed;
+                sessionStorage.setItem('scorequery_session', JSON.stringify(currentUser));
+
+                alert('🔑 비밀번호가 성공적으로 변경되었습니다.');
+                modal.remove();
+            } else {
+                alert('⚠️ 비밀번호 변경 중 오류가 발생했습니다. 다시 로그인해 주세요.');
+                handleLogoutAction();
+            }
+        };
+
+        // ── 3. 회원 탈퇴 비즈니스 로직 ──
+        const agreeChk = document.getElementById('agree-delete-chk');
+        const execDeleteBtn = document.getElementById('execute-delete-btn');
+
+        agreeChk.onchange = (e) => {
+            const isChecked = e.target.checked;
+            execDeleteBtn.disabled = !isChecked;
+            if (isChecked) {
+                execDeleteBtn.style.cursor = 'pointer';
+                execDeleteBtn.style.opacity = '1';
+            } else {
+                execDeleteBtn.style.cursor = 'not-allowed';
+                execDeleteBtn.style.opacity = '0.5';
+            }
+        };
+
+        execDeleteBtn.onclick = () => {
+            if (currentUser.isMaster) {
+                alert('⚠️ 마스터 계정은 탈퇴할 수 없습니다.');
+                return;
+            }
+
+            if (!confirm('⚠️ 정말로 회원 탈퇴를 최종 실행하시겠습니까?\n이 작업은 되돌릴 수 없으며 계정이 즉시 비활성화됩니다.')) {
+                return;
+            }
+
+            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
+            const idx = users.findIndex(u => u.email === currentUser.email);
+            if (idx >= 0) {
+                users[idx].status = 'deleted';
+                users[idx].deletedDate = new Date().toISOString();
+                localStorage.setItem('scorequery_users', JSON.stringify(users));
+            }
+
+            alert('🗑️ 회원 탈퇴 처리가 정상 완료되었습니다. 로그인 화면으로 돌아갑니다.');
+            modal.remove();
+            handleLogoutAction();
+        };
+    }
+
     function validateStep3() {
         const total = getEvalTotal();
         if (total !== 100) {
@@ -2179,7 +2496,7 @@
         if (masterLogout) masterLogout.addEventListener('click', handleLogoutAction);
 
         const masterChangePw = document.getElementById('master-change-pw-btn');
-        if (masterChangePw) masterChangePw.addEventListener('click', showChangePasswordModal);
+        if (masterChangePw) masterChangePw.addEventListener('click', () => showProfessorInfoMgmtModal('pw'));
 
         const masterBack = document.getElementById('master-back-home');
         if (masterBack) masterBack.addEventListener('click', showModeSelection);
@@ -2187,11 +2504,14 @@
         const adminLogout = document.getElementById('admin-logout-btn');
         if (adminLogout) adminLogout.addEventListener('click', handleLogoutAction);
 
+        const adminEditInfo = document.getElementById('admin-edit-info-btn');
+        if (adminEditInfo) adminEditInfo.addEventListener('click', () => showProfessorInfoMgmtModal('info'));
+
         const adminChangePw = document.getElementById('admin-change-pw-btn');
-        if (adminChangePw) adminChangePw.addEventListener('click', showChangePasswordModal);
+        if (adminChangePw) adminChangePw.addEventListener('click', () => showProfessorInfoMgmtModal('pw'));
 
         const adminDeleteAccount = document.getElementById('admin-delete-account-btn');
-        if (adminDeleteAccount) adminDeleteAccount.addEventListener('click', handleSelfDelete);
+        if (adminDeleteAccount) adminDeleteAccount.addEventListener('click', () => showProfessorInfoMgmtModal('delete'));
 
         const infoMgmtBtn = document.getElementById('admin-info-mgmt-btn');
         if (infoMgmtBtn) {
@@ -3302,141 +3622,7 @@
         }
     }
 
-    // ── 비밀번호 변경 모달 대화상자 ──
-    function showChangePasswordModal() {
-        const modalId = 'change-password-modal';
-        const existing = document.getElementById(modalId);
-        if (existing) existing.remove();
 
-        const modalHtml = `
-            <div id="${modalId}" style="
-                position: fixed;
-                top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(15, 23, 42, 0.75);
-                backdrop-filter: blur(8px);
-                display: flex; align-items: center; justify-content: center;
-                z-index: 99999;
-                font-family: inherit;
-            ">
-                <div style="
-                    background: rgba(30, 41, 59, 0.95);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 16px;
-                    width: 90%;
-                    max-width: 400px;
-                    padding: 24px;
-                    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
-                    color: #f8fafc;
-                ">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
-                        <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #f59e0b;">🔒 비밀번호 변경</h3>
-                        <button id="close-pw-modal-btn" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>
-                    </div>
-
-                    <div style="margin-bottom: 14px;">
-                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">현재 비밀번호</label>
-                        <input type="password" id="change-pw-current" placeholder="현재 비밀번호 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
-                    </div>
-
-                    <div style="margin-bottom: 14px;">
-                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호</label>
-                        <input type="password" id="change-pw-new" placeholder="대소문자/숫자/특수문자 포함 8자 이상" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
-                    </div>
-
-                    <div style="margin-bottom: 20px;">
-                        <label style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; font-weight: 600;">새 비밀번호 확인</label>
-                        <input type="password" id="change-pw-confirm" placeholder="새 비밀번호 재확인 입력" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(15,23,42,0.6); color: white; font-size: 13px; outline: none;">
-                    </div>
-
-                    <div id="change-pw-error" style="display: none; color: #f87171; font-size: 12px; margin-bottom: 16px; line-height: 1.4;"></div>
-
-                    <button id="save-pw-change-btn" style="
-                        width: 100%;
-                        background: linear-gradient(135deg, #f59e0b, #d97706);
-                        color: white;
-                        border: none;
-                        padding: 10px;
-                        border-radius: 6px;
-                        font-size: 0.875rem;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: opacity 0.2s;
-                    ">변경사항 저장</button>
-                </div>
-            </div>
-        `;
-
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        const modal = document.getElementById(modalId);
-        const closeBtn = document.getElementById('close-pw-modal-btn');
-        const saveBtn = document.getElementById('save-pw-change-btn');
-        const errEl = document.getElementById('change-pw-error');
-
-        closeBtn.onclick = () => modal.remove();
-
-        saveBtn.onclick = async () => {
-            errEl.style.display = 'none';
-
-            const currentVal = document.getElementById('change-pw-current').value;
-            const newVal = document.getElementById('change-pw-new').value;
-            const confirmVal = document.getElementById('change-pw-confirm').value;
-
-            if (!currentVal || !newVal || !confirmVal) {
-                errEl.textContent = '❌ 모든 항목을 입력해 주세요.';
-                errEl.style.display = 'block';
-                return;
-            }
-
-            if (!currentUser) {
-                errEl.textContent = '❌ 현재 로그인 세션 정보가 없습니다. 다시 로그인해 주세요.';
-                errEl.style.display = 'block';
-                return;
-            }
-
-            // 현재 비밀번호 검증
-            const currentHashed = await sha256(currentVal);
-            if (currentUser.pw !== currentHashed) {
-                errEl.textContent = '❌ 현재 비밀번호가 일치하지 않습니다.';
-                errEl.style.display = 'block';
-                return;
-            }
-
-            // 새 비밀번호 조건 검증 (대소문자, 숫자, 특수문자 8자 이상)
-            const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
-            if (!pwRegex.test(newVal)) {
-                errEl.textContent = '❌ 새 비밀번호는 영문 대소문자, 숫자, 특수문자를 각각 최소 1개 이상 포함하여 8자 이상이어야 합니다.';
-                errEl.style.display = 'block';
-                return;
-            }
-
-            // 비밀번호 일치 검증
-            if (newVal !== confirmVal) {
-                errEl.textContent = '❌ 새 비밀번호와 새 비밀번호 확인이 일치하지 않습니다.';
-                errEl.style.display = 'block';
-                return;
-            }
-
-            // 새 비밀번호 해시화 및 DB 업데이트
-            const newHashed = await sha256(newVal);
-            const users = JSON.parse(localStorage.getItem('scorequery_users') || '[]');
-            const idx = users.findIndex(u => u.email === currentUser.email);
-            if (idx >= 0) {
-                users[idx].pw = newHashed;
-                localStorage.setItem('scorequery_users', JSON.stringify(users));
-                
-                // 세션 정보 갱신
-                currentUser.pw = newHashed;
-                sessionStorage.setItem('scorequery_session', JSON.stringify(currentUser));
-                
-                alert('🔑 비밀번호가 성공적으로 변경되었습니다.');
-                modal.remove();
-            } else {
-                alert('⚠️ 비밀번호 변경 중 오류가 발생했습니다. 다시 로그인해 주세요.');
-                handleLogoutAction();
-            }
-        };
-    }
 
     // ── Google Apps Script 자동 메일 발송 설정 가이드 팝업 모달 ──
     function showGasGuideModal() {
